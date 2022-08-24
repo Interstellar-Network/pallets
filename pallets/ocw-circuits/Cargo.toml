@@ -19,9 +19,9 @@ serde = { version = '1.0.130', default-features = false, features = ['derive'] }
 serde_json = { version = '1.0.67', default-features = false, features = ['alloc'] }
 
 # https://github.com/tokio-rs/prost#using-prost-in-a-no_std-crate
-prost = { version = "0.9", default-features = false, features = ["prost-derive"] }
+prost = { version = "0.11", default-features = false, features = ["prost-derive"] }
 # "Only necessary if using Protobuf well-known types:"
-prost-types = { version = "0.9", default-features = false }
+prost-types = { version = "0.11", default-features = false }
 
 ocw-common = { path = "../../ocw-common", default-features = false }
 
@@ -64,7 +64,7 @@ runtime-benchmarks = ["frame-benchmarking/runtime-benchmarks"]
 try-runtime = ["frame-support/try-runtime"]
 
 [build-dependencies]
-prost-build = "0.9.0"
+prost-build = "0.11"
 
 # pb-rs = "0.9.1"
 # walkdir = "2.3.2"
