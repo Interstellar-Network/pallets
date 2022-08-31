@@ -155,6 +155,19 @@ pub mod pallet {
     #[pallet::storage]
     pub(super) type Nonce<T: Config> = StorageValue<_, u64, ValueQuery>;
 
+    // TODO decouple cf https://substrate.stackexchange.com/questions/3354/access-storage-map-from-another-pallet-without-trait-pallet-config
+    pub struct DisplaySkcdPackageValueCopyPrefix;
+    impl frame_support::traits::StorageInstance for DisplaySkcdPackageValueCopyPrefix {
+        fn pallet_prefix() -> &'static str {
+            "OcwCircuits"
+        }
+
+        const STORAGE_PREFIX: &'static str = "DisplaySkcdPackageValue";
+    }
+
+    #[pallet::storage]
+    pub type DisplaySkcdPackageValueCopy<T> = StorageValue<_, pallet_ocw_circuits::DisplaySkcdPackage, ValueQuery>;
+
     #[pallet::pallet]
     #[pallet::generate_store(pub(super) trait Store)]
     pub struct Pallet<T>(_);
@@ -254,6 +267,26 @@ pub mod pallet {
     //     }
     // }
 
+    // FAIL
+    // impl<T: Config> Pallet<T> {
+    //     /// Read the Storage from OcwCircuits directly!
+    //     /// NOTE: this is bad, it will fail if the storage changes, and the compiler will not catch it!
+    //     /// https://substrate.stackexchange.com/questions/3354/access-storage-map-from-another-pallet-without-trait-pallet-config
+    //     fn get_ocw_circuits_storage_value() -> Option<pallet_ocw_circuits::DisplaySkcdPackage> {
+    //         const PALLET_NAME: &'static str = "OcwCircuits";
+    //         const STORAGE_NAME: &'static str = "DisplaySkcdPackageValue";
+
+    //         let pallet_hash = sp_io::hashing::twox_128(PALLET_NAME.as_bytes());
+    //         let storage_hash = sp_io::hashing::twox_128(STORAGE_NAME.as_bytes());
+
+    //         let mut final_key = Vec::new();
+    //         final_key.extend_from_slice(&pallet_hash);
+    //         final_key.extend_from_slice(&storage_hash);
+
+    //         frame_support::storage::unhashed::get::<pallet_ocw_circuits::DisplaySkcdPackage>(&final_key)
+    //     }
+    // }
+
     #[pallet::call]
     impl<T: Config> Pallet<T> {
         #[pallet::weight(10000)]
@@ -291,9 +324,24 @@ pub mod pallet {
             );
 
             // read DisplayCircuitsPackageValue directly from ocw-circuits
-            let display_circuits_package =
-                pallet_ocw_circuits::Pallet::<T>::get_display_circuits_package()
-                    .expect("display_circuits_package not ready!");
+            //
+            // FAIL, even with "key_hashes.push(storage_value_key("OcwCircuits", "DisplaySkcdPackageValue"))"
+            // let display_circuits_package =
+            //     pallet_ocw_circuits::Pallet::<T>::get_display_circuits_package()
+            //         .expect("display_circuits_package not ready!");
+            //
+            // let display_circuits_package = <pallet_ocw_circuits::Pallet<T> as Trait>::DisplaySkcdPackageValue::<T>::get();
+            // // CHECK: error-out if both fields are not set
+            // if display_circuits_package.message_skcd_server_metadata_nb_digits == 0
+            //     || display_circuits_package.pinpad_skcd_server_metadata_nb_digits == 0
+            // {
+            //     return Err(<Error<T>>::DisplaySkcdPackageValueError);
+            // }
+            //
+            // let display_circuits_package = Self::get_ocw_circuits_storage_value().unwrap();
+            //
+            let display_circuits_package = <DisplaySkcdPackageValueCopy<T>>::get();
+
             log::info!(
                 "[ocw-garble] display_circuits_package: ({:?},{:?}) ({:?},{:?})",
                 sp_std::str::from_utf8(&display_circuits_package.message_skcd_cid)
