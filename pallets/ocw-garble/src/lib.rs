@@ -380,17 +380,28 @@ pub mod pallet {
             let message_digits: Vec<u8> = (0..2).map(|_| rng.gen_range(0..10)).collect();
             log::info!("[ocw-garble] message_digits: {:?}", message_digits,);
 
-            Self::append_or_replace_skcd_hash(
-                GrpcCallKind::GarbleAndStrip,
-                // optional: only if GrpcCallKind::GarbleStandard
-                None,
-                // optional: only if GrpcCallKind::GarbleAndStrip
-                Some(display_circuits_package.message_skcd_cid.to_vec()),
-                Some(display_circuits_package.pinpad_skcd_cid.to_vec()),
-                Some(tx_msg),
-                Some(message_digits),
-                Some(pinpad_digits),
+            // Self::append_or_replace_skcd_hash(
+            //     GrpcCallKind::GarbleAndStrip,
+            //     // optional: only if GrpcCallKind::GarbleStandard
+            //     None,
+            //     // optional: only if GrpcCallKind::GarbleAndStrip
+            //     Some(display_circuits_package.message_skcd_cid.to_vec()),
+            //     Some(display_circuits_package.pinpad_skcd_cid.to_vec()),
+            //     Some(tx_msg),
+            //     Some(message_digits),
+            //     Some(pinpad_digits),
+            // );
+            //
+            // FAIL: apparently "fn offchain_worker" is NOT called?
+            Self::call_grpc_garble_and_strip(
+                display_circuits_package.message_skcd_cid.to_vec(),
+                display_circuits_package.pinpad_skcd_cid.to_vec(),
+                tx_msg,
+                message_digits,
+                pinpad_digits,
             );
+
+            // Self::finalize_grpc_call(result_grpc_call);
 
             Ok(())
         }
@@ -716,10 +727,10 @@ pub mod pallet {
                 // construct the full endpoint URI using:
                 // - dynamic "URI root" from env
                 // - hardcoded API_ENDPOINT_GARBLE_STRIP_URL from "const" in this file
-                #[cfg(feature = "std")]
+                #[cfg(all(not(feature = "sgx"), feature = "std"))]
                 let uri_root = std::env::var("INTERSTELLAR_URI_ROOT_API_GARBLE").unwrap();
-                #[cfg(not(feature = "std"))]
-                let uri_root = "PLACEHOLDER_no_std";
+                #[cfg(all(not(feature = "std"), feature = "sgx"))]
+                let uri_root = sgx_tstd::env::var("INTERSTELLAR_URI_ROOT_API_GARBLE").unwrap();
                 let endpoint = format!("{}{}", uri_root, API_ENDPOINT_GARBLE_STRIP_URL);
 
                 let (resp_bytes, resp_content_type) =
