@@ -3,7 +3,9 @@
 mod interstellarpbapigarble {
     // include_bytes!(concat!(env!("OUT_DIR")), "/interstellarpbapigarble.rs");
     // include_bytes!(concat!(env!("OUT_DIR"), "/interstellarpbapigarble.rs"));
-    include!(concat!(env!("OUT_DIR"), "/interstellarpbapigarble.rs"));
+    // prost-build FAIL in enclave/SGX
+    // include!(concat!(env!("OUT_DIR"), "/interstellarpbapigarble.rs"));
+    include!("../deps/protos/generated/rust/interstellarpbapigarble.rs");
 }
 
 pub use pallet::*;
@@ -166,7 +168,8 @@ pub mod pallet {
     }
 
     #[pallet::storage]
-    pub type DisplaySkcdPackageValueCopy<T> = StorageValue<_, pallet_ocw_circuits::DisplaySkcdPackage, ValueQuery>;
+    pub type DisplaySkcdPackageValueCopy<T> =
+        StorageValue<_, pallet_ocw_circuits::DisplaySkcdPackage, ValueQuery>;
 
     #[pallet::pallet]
     #[pallet::generate_store(pub(super) trait Store)]
@@ -782,7 +785,9 @@ pub mod pallet {
                     //   - `Some((account, Err(())))`: error occurred when sending the transaction
                     let signer = Signer::<T, <T as Config>::AuthorityId>::all_accounts();
                     if !signer.can_sign() {
-                        log::error!("[ocw-garble] No local accounts available. Consider adding one via `author_insertKey` RPC[ALTERNATIVE DEV ONLY check 'if config.offchain_worker.enabled' in service.rs]");
+                        log::error!(
+                            "[ocw-garble] No local accounts available. Consider adding one via `author_insertKey` RPC[ALTERNATIVE DEV ONLY check 'if config.offchain_worker.enabled' in service.rs]"
+                        );
                     }
 
                     let results = signer.send_signed_transaction(|_account| match &result_reply {

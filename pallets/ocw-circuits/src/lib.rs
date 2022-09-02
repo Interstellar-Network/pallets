@@ -3,7 +3,10 @@
 mod interstellarpbapicircuits {
     // include_bytes!(concat!(env!("OUT_DIR")), "/interstellarpbapicircuits.rs");
     // include_bytes!(concat!(env!("OUT_DIR"), "/interstellarpbapicircuits.rs"));
-    include!(concat!(env!("OUT_DIR"), "/interstellarpbapicircuits.rs"));
+    //
+    // prost-build FAIL in enclave/SGX
+    // include!(concat!(env!("OUT_DIR"), "/interstellarpbapicircuits.rs"));
+    include!("../deps/protos/generated/rust/interstellarpbapicircuits.rs");
 }
 
 pub use pallet::*;
@@ -578,7 +581,9 @@ pub mod pallet {
                     //   - `Some((account, Err(())))`: error occurred when sending the transaction
                     let signer = Signer::<T, T::AuthorityId>::all_accounts();
                     if !signer.can_sign() {
-                        log::error!("[ocw-circuits] No local accounts available. Consider adding one via `author_insertKey` RPC[ALTERNATIVE DEV ONLY check 'if config.offchain_worker.enabled' in service.rs]");
+                        log::error!(
+                            "[ocw-circuits] No local accounts available. Consider adding one via `author_insertKey` RPC[ALTERNATIVE DEV ONLY check 'if config.offchain_worker.enabled' in service.rs]"
+                        );
                     }
 
                     let results = signer.send_signed_transaction(|_account| match &result_reply {
