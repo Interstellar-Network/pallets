@@ -100,6 +100,8 @@ pub mod pallet {
         + CreateSignedTransaction<Call<Self>>
         + pallet_tx_validation::Config
         + pallet_ocw_circuits::Config
+        // TODO TOREMOVE
+        + pallet_timestamp::Config
     {
         /// The overarching event type.
         type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
@@ -157,19 +159,19 @@ pub mod pallet {
     #[pallet::storage]
     pub(super) type Nonce<T: Config> = StorageValue<_, u64, ValueQuery>;
 
-    // TODO decouple cf https://substrate.stackexchange.com/questions/3354/access-storage-map-from-another-pallet-without-trait-pallet-config
-    pub struct DisplaySkcdPackageValueCopyPrefix;
-    impl frame_support::traits::StorageInstance for DisplaySkcdPackageValueCopyPrefix {
-        fn pallet_prefix() -> &'static str {
-            "OcwCircuits"
-        }
+    // // TODO decouple cf https://substrate.stackexchange.com/questions/3354/access-storage-map-from-another-pallet-without-trait-pallet-config
+    // pub struct DisplaySkcdPackageValueCopyPrefix;
+    // impl frame_support::traits::StorageInstance for DisplaySkcdPackageValueCopyPrefix {
+    //     fn pallet_prefix() -> &'static str {
+    //         "OcwCircuits"
+    //     }
 
-        const STORAGE_PREFIX: &'static str = "DisplaySkcdPackageValue";
-    }
+    //     const STORAGE_PREFIX: &'static str = "DisplaySkcdPackageValue";
+    // }
 
-    #[pallet::storage]
-    pub type DisplaySkcdPackageValueCopy<T> =
-        StorageValue<_, pallet_ocw_circuits::DisplaySkcdPackage, ValueQuery>;
+    // #[pallet::storage]
+    // pub type DisplaySkcdPackageValueCopy<T> =
+    //     StorageValue<_, pallet_ocw_circuits::DisplaySkcdPackage, ValueQuery>;
 
     #[pallet::pallet]
     #[pallet::generate_store(pub(super) trait Store)]
@@ -271,24 +273,26 @@ pub mod pallet {
     // }
 
     // FAIL
-    // impl<T: Config> Pallet<T> {
-    //     /// Read the Storage from OcwCircuits directly!
-    //     /// NOTE: this is bad, it will fail if the storage changes, and the compiler will not catch it!
-    //     /// https://substrate.stackexchange.com/questions/3354/access-storage-map-from-another-pallet-without-trait-pallet-config
-    //     fn get_ocw_circuits_storage_value() -> Option<pallet_ocw_circuits::DisplaySkcdPackage> {
-    //         const PALLET_NAME: &'static str = "OcwCircuits";
-    //         const STORAGE_NAME: &'static str = "DisplaySkcdPackageValue";
+    impl<T: Config> Pallet<T> {
+        /// Read the Storage from OcwCircuits directly!
+        /// NOTE: this is bad, it will fail if the storage changes, and the compiler will not catch it!
+        /// https://substrate.stackexchange.com/questions/3354/access-storage-map-from-another-pallet-without-trait-pallet-config
+        fn get_ocw_circuits_storage_value() -> Option<pallet_ocw_circuits::DisplaySkcdPackage> {
+            const PALLET_NAME: &'static str = "OcwCircuits";
+            const STORAGE_NAME: &'static str = "DisplaySkcdPackageValue";
 
-    //         let pallet_hash = sp_io::hashing::twox_128(PALLET_NAME.as_bytes());
-    //         let storage_hash = sp_io::hashing::twox_128(STORAGE_NAME.as_bytes());
+            let pallet_hash = sp_io::hashing::twox_128(PALLET_NAME.as_bytes());
+            let storage_hash = sp_io::hashing::twox_128(STORAGE_NAME.as_bytes());
 
-    //         let mut final_key = Vec::new();
-    //         final_key.extend_from_slice(&pallet_hash);
-    //         final_key.extend_from_slice(&storage_hash);
+            let mut final_key = Vec::new();
+            final_key.extend_from_slice(&pallet_hash);
+            final_key.extend_from_slice(&storage_hash);
 
-    //         frame_support::storage::unhashed::get::<pallet_ocw_circuits::DisplaySkcdPackage>(&final_key)
-    //     }
-    // }
+            frame_support::storage::unhashed::get::<pallet_ocw_circuits::DisplaySkcdPackage>(
+                &final_key,
+            )
+        }
+    }
 
     #[pallet::call]
     impl<T: Config> Pallet<T> {
@@ -326,6 +330,20 @@ pub mod pallet {
                 who
             );
 
+            // TODO TOREMOVE Timestamp::<T>::now()
+            // WITHOUT: "key_hashes.push(storage_value_key("Timestamp", "Now"));"
+            // --> [ocw-garble] garble_and_strip_display_circuits_package_signed: now = 0
+            // --> [ocw-garble] garble_and_strip_display_circuits_package_signed: now = 0
+            // WITH: "key_hashes.push(storage_value_key("Timestamp", "Now"));"
+            // --> same
+            let now = <pallet_timestamp::Pallet<T>>::get();
+            log::info!(
+                "[ocw-garble] garble_and_strip_display_circuits_package_signed: now = {:?}",
+                // FAIL now()
+                // FAIL "not found in `pallet_timestamp" pallet_timestamp::<T>::now()
+                now
+            );
+
             // read DisplayCircuitsPackageValue directly from ocw-circuits
             //
             // FAIL, even with "key_hashes.push(storage_value_key("OcwCircuits", "DisplaySkcdPackageValue"))"
@@ -341,9 +359,9 @@ pub mod pallet {
             //     return Err(<Error<T>>::DisplaySkcdPackageValueError);
             // }
             //
-            // let display_circuits_package = Self::get_ocw_circuits_storage_value().unwrap();
+            let display_circuits_package = Self::get_ocw_circuits_storage_value().unwrap();
             //
-            let display_circuits_package = <DisplaySkcdPackageValueCopy<T>>::get();
+            // let display_circuits_package = <DisplaySkcdPackageValueCopy<T>>::get();
 
             log::info!(
                 "[ocw-garble] display_circuits_package: ({:?},{:?}) ({:?},{:?})",

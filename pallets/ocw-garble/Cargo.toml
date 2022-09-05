@@ -35,6 +35,8 @@ prost-types = { version = "0.11", default-features = false }
 ocw-common = { path = "../../ocw-common", default-features = false }
 pallet-tx-validation = { path = "../tx-validation", default-features = false }
 pallet-ocw-circuits = { path = "../ocw-circuits", default-features = false }
+# TODO TOREMOVE
+pallet-timestamp = { default-features = false, version = "4.0.0-dev", git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.26"}
 
 # prost: could not find a way to use encode() in no_std context...
 # = note: the lang item is first defined in crate `std` (which `byteorder` depends on)
