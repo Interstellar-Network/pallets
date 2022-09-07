@@ -14,16 +14,16 @@ categories = [
 	"offchain worker",
 ]
 scale-info = { default-features = false, features = ['derive'], version = '1.0' }
-serde = { version = '1.0.130', default-features = false, features = ['derive'] }
-serde_json = { version = '1.0.67', default-features = false, features = ['alloc'] }
+serde = { version = '1.0', default-features = false, features = ['derive'] }
+serde_json = { version = '1.0', default-features = false, features = ['alloc'] }
 
 [package.metadata.docs.rs]
 targets = ['x86_64-unknown-linux-gnu']
 
 [dependencies]
 log = { version = "0.4", default-features = false }
-serde = { version = '1.0.130', default-features = false, features = ['derive'] }
-serde_json = { version = '1.0.67', default-features = false, features = ['alloc'] }
+serde = { version = '1.0', default-features = false, features = ['derive'] }
+serde_json = { version = '1.0', default-features = false, features = ['alloc'] }
 rand_chacha = { version = "0.3.1", default-features = false }
 rand = { version = "0.8.5", default-features = false }
 
@@ -60,6 +60,14 @@ sp-std = { default-features = false, version = "4.0.0", git = "https://github.co
 
 sgx_tstd = { branch = "master", git = "https://github.com/apache/teaclave-sgx-sdk.git", optional = true }
 
+# TEMP; only needed for "get_timestamp_rpc"
+# itp-rpc = { path = "../../../core-primitives/rpc", default-features = false }
+# itc-rpc-client = { path = "../../../core/rpc-client" }
+# itp-types = { default-features = false, git = "https://github.com/integritee-network/pallets.git", branch = "master" }
+# itp-utils = { default-features = false, git = "https://github.com/integritee-network/pallets.git", branch = "master" }
+#
+substrate-api-client = { git = "https://github.com/scs/substrate-api-client", branch = "polkadot-v0.9.26" }
+
 [features]
 default = ["std"]
 std = [
@@ -79,10 +87,17 @@ std = [
 	"pallet-tx-validation/std",
 	"pallet-ocw-circuits/std",
 	"ocw-common/std",
+	# TEMP
+	# "itp-types/std",
+    # "itp-utils/std",
+	# "itp-rpc/std",
+	"substrate-api-client/std",
 ]
 sgx = [
     "ocw-common/sgx",
 	"sgx_tstd",
+	# TEMP
+	# "itp-rpc/sgx",
 ]
 runtime-benchmarks = ["frame-benchmarking/runtime-benchmarks"]
 try-runtime = ["frame-support/try-runtime"]
