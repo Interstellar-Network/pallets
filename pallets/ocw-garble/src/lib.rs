@@ -280,26 +280,40 @@ pub mod pallet {
         ///     -> issue with sgx_tstd + std]
         /// cf https://github.com/scs/substrate-api-client/blob/master/examples/example_get_storage.rs
         fn get_timestamp_rpc() -> Option<pallet_ocw_circuits::DisplaySkcdPackage> {
-            use substrate_api_client::{Api, PlainTipExtrinsicParams, rpc::WsRpcClient};
+            // TODO use proper struct to encode the request
+            // let input = crate::interstellarpbapigarble::GarbleIpfsRequest {
+            //     skcd_cid: skcd_cid_str,
+            // };
+            // let body_bytes = ocw_common::encode_body_grpc_web(input);
 
-            // let url = format!("{}:{}", String::from("ws://127.0.0.1"), String::from("9990"));
-            let url = "ws://127.0.0.1:9990";
-            // TODO?
-            // #[cfg(feature = "std")]
-            // let url = std::env::var("INTERSTELLAR_URI_ROOT_API_GARBLE").unwrap();
-            // #[cfg(not(feature = "std"))]
-            // let url = "PLACEHOLDER_no_std";
-            // let endpoint = format!("{}{}", uri_root, API_ENDPOINT_GARBLE_URL);
+            let endpoint = get_full_uri(API_ENDPOINT_GARBLE_URL);
 
-            let client = WsRpcClient::new(&url);
-            let mut api = Api::<(), _, PlainTipExtrinsicParams>::new(client).unwrap();
+            let (resp_bytes, resp_content_type) =
+                ocw_common::fetch_from_remote_grpc_web(prost::bytes::Bytes::new(), &endpoint).map_err(|e| {
+                    log::error!("[ocw-garble] call_grpc_garble error: {:?}", e);
+                    <Error<T>>::HttpFetchingError
+                }).unwrap();
 
-            // get some plain storage value
-            let result: u128 = api
-                .get_storage_value("Balances", "TotalIssuance", None)
-                .unwrap()
-                .unwrap();
-            log::info!("[+] TotalIssuance is {}", result);
+            // TODO
+            // let resp: crate::interstellarpbapigarble::GarbleIpfsReply = ocw_common::decode_body_json(resp_bytes, resp_content_type);
+
+
+            // use substrate_api_client::{Api, PlainTipExtrinsicParams, rpc::WsRpcClient};
+
+            // // let url = format!("{}:{}", String::from("ws://127.0.0.1"), String::from("9990"));
+            // let url = "ws://127.0.0.1:9990";
+            // // TODO?
+            // // let endpoint = get_full_uri(API_ENDPOINT_GARBLE_URL);;
+
+            // let client = WsRpcClient::new(&url);
+            // let mut api = Api::<(), _, PlainTipExtrinsicParams>::new(client).unwrap();
+
+            // // get some plain storage value
+            // let result: u128 = api
+            //     .get_storage_value("Balances", "TotalIssuance", None)
+            //     .unwrap()
+            //     .unwrap();
+            // log::info!("[+] TotalIssuance is {}", result);
 
             // use itc_rpc_client::direct_client::DirectClient;
             // use itc_rpc_client::direct_client::DirectApi;
@@ -853,16 +867,9 @@ pub mod pallet {
             let input = crate::interstellarpbapigarble::GarbleIpfsRequest {
                 skcd_cid: skcd_cid_str,
             };
-            let body_bytes = ocw_common::encode_body(input);
+            let body_bytes = ocw_common::encode_body_grpc_web(input);
 
-            // construct the full endpoint URI using:
-            // - dynamic "URI root" from env
-            // - hardcoded API_ENDPOINT_GARBLE_URL from "const" in this file
-            #[cfg(feature = "std")]
-            let uri_root = std::env::var("INTERSTELLAR_URI_ROOT_API_GARBLE").unwrap();
-            #[cfg(not(feature = "std"))]
-            let uri_root = "PLACEHOLDER_no_std";
-            let endpoint = format!("{}{}", uri_root, API_ENDPOINT_GARBLE_URL);
+            let endpoint = get_full_uri(API_ENDPOINT_GARBLE_URL);
 
             let (resp_bytes, resp_content_type) =
                 ocw_common::fetch_from_remote_grpc_web(body_bytes, &endpoint).map_err(|e| {
@@ -870,8 +877,7 @@ pub mod pallet {
                     <Error<T>>::HttpFetchingError
                 })?;
 
-            let (resp, _trailers): (crate::interstellarpbapigarble::GarbleIpfsReply, _) =
-                ocw_common::decode_body(resp_bytes, resp_content_type);
+            let resp: crate::interstellarpbapigarble::GarbleIpfsReply = ocw_common::decode_body_grpc_web(resp_bytes, resp_content_type);
             Ok(GrpcCallReplyKind::GarbleStandard(resp))
         }
 
@@ -903,16 +909,9 @@ pub mod pallet {
                         digits: digits.clone().into(),
                     }),
                 };
-                let body_bytes = ocw_common::encode_body(input);
+                let body_bytes = ocw_common::encode_body_grpc_web(input);
 
-                // construct the full endpoint URI using:
-                // - dynamic "URI root" from env
-                // - hardcoded API_ENDPOINT_GARBLE_STRIP_URL from "const" in this file
-                #[cfg(all(not(feature = "sgx"), feature = "std"))]
-                let uri_root = std::env::var("INTERSTELLAR_URI_ROOT_API_GARBLE").unwrap();
-                #[cfg(all(not(feature = "std"), feature = "sgx"))]
-                let uri_root = sgx_tstd::env::var("INTERSTELLAR_URI_ROOT_API_GARBLE").unwrap();
-                let endpoint = format!("{}{}", uri_root, API_ENDPOINT_GARBLE_STRIP_URL);
+                let endpoint = get_full_uri(API_ENDPOINT_GARBLE_STRIP_URL);
 
                 let (resp_bytes, resp_content_type) =
                     ocw_common::fetch_from_remote_grpc_web(body_bytes, &endpoint).map_err(|e| {
@@ -920,10 +919,7 @@ pub mod pallet {
                         <Error<T>>::HttpFetchingError
                     })?;
 
-                let (resp, _trailers): (
-                    crate::interstellarpbapigarble::GarbleAndStripIpfsReply,
-                    _,
-                ) = ocw_common::decode_body(resp_bytes, resp_content_type);
+                let resp: crate::interstellarpbapigarble::GarbleAndStripIpfsReply = ocw_common::decode_body_grpc_web(resp_bytes, resp_content_type);
                 Ok(resp)
             }
 
@@ -1007,5 +1003,21 @@ pub mod pallet {
         fn current_block_number() -> Self::BlockNumber {
             <frame_system::Pallet<T>>::block_number()
         }
+    }
+
+    /// construct the full endpoint URI using:
+    /// - dynamic "URI root" from env
+    /// - hardcoded API_ENDPOINT_GARBLE_STRIP_URL from "const" in this file
+    #[cfg(all(not(feature = "std"), feature = "sgx"))]
+    fn get_full_uri(endpoint: &str) -> sgx_tstd::string::String {
+        let uri_root = sgx_tstd::env::var("INTERSTELLAR_URI_ROOT_API_GARBLE").unwrap();
+
+        format!("{}{}", uri_root, endpoint)
+    }
+    #[cfg(all(not(feature = "sgx"), feature = "std"))]
+    fn get_full_uri(endpoint: &str) -> String {
+        let uri_root = std::env::var("INTERSTELLAR_URI_ROOT_API_GARBLE").unwrap();
+
+        format!("{}{}", uri_root, endpoint)
     }
 }

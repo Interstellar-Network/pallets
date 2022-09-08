@@ -457,7 +457,7 @@ pub mod pallet {
             let input = crate::interstellarpbapicircuits::SkcdGenericFromIpfsRequest {
                 verilog_cid: verilog_cid_str,
             };
-            let body_bytes = ocw_common::encode_body(input);
+            let body_bytes = ocw_common::encode_body_grpc_web(input);
 
             // construct the full endpoint URI using:
             // - dynamic "URI root" from env
@@ -474,10 +474,7 @@ pub mod pallet {
                     <Error<T>>::HttpFetchingError
                 })?;
 
-            let (resp, _trailers): (
-                crate::interstellarpbapicircuits::SkcdGenericFromIpfsReply,
-                _,
-            ) = ocw_common::decode_body(resp_bytes, resp_content_type);
+            let resp: crate::interstellarpbapicircuits::SkcdGenericFromIpfsReply = ocw_common::decode_body_grpc_web(resp_bytes, resp_content_type);
             Ok(GrpcCallReplyKind::Generic(resp))
         }
 
@@ -533,7 +530,7 @@ pub mod pallet {
                     }
                 };
 
-                let body_bytes = ocw_common::encode_body(input);
+                let body_bytes = ocw_common::encode_body_grpc_web(input);
 
                 // construct the full endpoint URI using:
                 // - dynamic "URI root" from env
@@ -550,8 +547,7 @@ pub mod pallet {
                         <Error<T>>::HttpFetchingError
                     })?;
 
-                let (resp, _trailers): (crate::interstellarpbapicircuits::SkcdDisplayReply, _) =
-                    ocw_common::decode_body(resp_bytes, resp_content_type);
+                let resp: crate::interstellarpbapicircuits::SkcdDisplayReply = ocw_common::decode_body_grpc_web(resp_bytes, resp_content_type);
 
                 Ok(resp)
             }

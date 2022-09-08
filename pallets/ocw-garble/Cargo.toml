@@ -66,7 +66,7 @@ sgx_tstd = { branch = "master", git = "https://github.com/apache/teaclave-sgx-sd
 # itp-types = { default-features = false, git = "https://github.com/integritee-network/pallets.git", branch = "master" }
 # itp-utils = { default-features = false, git = "https://github.com/integritee-network/pallets.git", branch = "master" }
 #
-substrate-api-client = { git = "https://github.com/scs/substrate-api-client", branch = "polkadot-v0.9.26" }
+# substrate-api-client = { git = "https://github.com/scs/substrate-api-client", branch = "polkadot-v0.9.26" }
 
 [features]
 default = ["std"]
@@ -91,7 +91,7 @@ std = [
 	# "itp-types/std",
     # "itp-utils/std",
 	# "itp-rpc/std",
-	"substrate-api-client/std",
+	# "substrate-api-client/std",
 ]
 sgx = [
     "ocw-common/sgx",
