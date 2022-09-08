@@ -468,13 +468,18 @@ pub mod pallet {
             let uri_root = "PLACEHOLDER_no_std";
             let endpoint = format!("{}{}", uri_root, API_ENDPOINT_GENERIC_URL);
 
-            let (resp_bytes, resp_content_type) =
-                ocw_common::fetch_from_remote_grpc_web(body_bytes, &endpoint).map_err(|e| {
-                    log::error!("[ocw-circuits] call_grpc_generic error: {:?}", e);
-                    <Error<T>>::HttpFetchingError
-                })?;
+            let (resp_bytes, resp_content_type) = ocw_common::fetch_from_remote_grpc_web(
+                body_bytes,
+                &endpoint,
+                ocw_common::ContentType::GrpcWeb,
+            )
+            .map_err(|e| {
+                log::error!("[ocw-circuits] call_grpc_generic error: {:?}", e);
+                <Error<T>>::HttpFetchingError
+            })?;
 
-            let resp: crate::interstellarpbapicircuits::SkcdGenericFromIpfsReply = ocw_common::decode_body_grpc_web(resp_bytes, resp_content_type);
+            let resp: crate::interstellarpbapicircuits::SkcdGenericFromIpfsReply =
+                ocw_common::decode_body_grpc_web(resp_bytes, resp_content_type);
             Ok(GrpcCallReplyKind::Generic(resp))
         }
 
@@ -541,13 +546,18 @@ pub mod pallet {
                 let uri_root = "PLACEHOLDER_no_std";
                 let endpoint = format!("{}{}", uri_root, API_ENDPOINT_DISPLAY_URL);
 
-                let (resp_bytes, resp_content_type) =
-                    ocw_common::fetch_from_remote_grpc_web(body_bytes, &endpoint).map_err(|e| {
-                        log::error!("[ocw-circuits] call_grpc_display error: {:?}", e);
-                        <Error<T>>::HttpFetchingError
-                    })?;
+                let (resp_bytes, resp_content_type) = ocw_common::fetch_from_remote_grpc_web(
+                    body_bytes,
+                    &endpoint,
+                    ocw_common::ContentType::GrpcWeb,
+                )
+                .map_err(|e| {
+                    log::error!("[ocw-circuits] call_grpc_display error: {:?}", e);
+                    <Error<T>>::HttpFetchingError
+                })?;
 
-                let resp: crate::interstellarpbapicircuits::SkcdDisplayReply = ocw_common::decode_body_grpc_web(resp_bytes, resp_content_type);
+                let resp: crate::interstellarpbapicircuits::SkcdDisplayReply =
+                    ocw_common::decode_body_grpc_web(resp_bytes, resp_content_type);
 
                 Ok(resp)
             }

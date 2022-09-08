@@ -26,6 +26,7 @@ pub mod pallet {
     use rand_chacha::{rand_core::SeedableRng, ChaChaRng};
     use scale_info::prelude::*;
     use serde::Deserialize;
+    use serde_json::json;
     use sp_core::crypto::KeyTypeId;
     use sp_core::offchain::Duration;
     use sp_runtime::offchain::storage::StorageValueRef;
@@ -96,12 +97,10 @@ pub mod pallet {
     // (callback from offchain_worker)
     #[pallet::config]
     pub trait Config:
-        frame_system::Config
-        + CreateSignedTransaction<Call<Self>>
-        + pallet_tx_validation::Config
-        + pallet_ocw_circuits::Config
-        // TODO TOREMOVE
-        + pallet_timestamp::Config
+        frame_system::Config + CreateSignedTransaction<Call<Self>> + pallet_tx_validation::Config
+    // TODO? + pallet_ocw_circuits::Config
+    // TODO TOREMOVE
+    // + pallet_timestamp::Config
     {
         /// The overarching event type.
         type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
@@ -141,6 +140,23 @@ pub mod pallet {
         DisplayStrippedCircuitsPackage,
         ConstU32<MAX_NUMBER_PENDING_CIRCUITS_PER_ACCOUNT>,
     >;
+
+    /// MUST match pallet_ocw_circuits::DisplaySkcdPackage
+    // TODO SHOULD we use pallet_ocw_circuits::DisplaySkcdPackage? or instead move to a new common crate?
+    #[derive(Debug, Deserialize)]
+    pub struct DisplaySkcdPackageCopy {
+        // IMPORTANT BoundedVec does not seem to be Deserializeable, even if we are indeed using "frame-support" containing
+        // https://github.com/paritytech/substrate/pull/11314
+        // It works fine for the "std" build, but not for enclave-runtime
+        // TODO find a w/a and use BoundedVec here, and add "Deserialize," to DisplaySkcdPackage
+        //
+        // 32 b/c IPFS hash is 256 bits = 32 bytes
+        // But due to encoding(??) in practice it is 46 bytes(checked with debugger), and we take some margin
+        pub message_skcd_cid: Vec<u8>,
+        pub message_skcd_server_metadata_nb_digits: u32,
+        pub pinpad_skcd_cid: Vec<u8>,
+        pub pinpad_skcd_server_metadata_nb_digits: u32,
+    }
 
     /// Store account_id -> list(ipfs_cids);
     /// That represents the "list of pending txs" for a given Account
@@ -204,8 +220,7 @@ pub mod pallet {
 
         // Error returned when fetching github info
         HttpFetchingError,
-        DeserializeToObjError,
-        DeserializeToStrError,
+        DeserializeError,
     }
 
     #[pallet::hooks]
@@ -273,30 +288,45 @@ pub mod pallet {
     // }
 
     impl<T: Config> Pallet<T> {
-
         /// Get the Storage using an RPC
         /// Needed b/c Storage access from a worker is not yet functional: https://github.com/integritee-network/worker/issues/976
         /// [FAIL cf core/rpc-client/src/direct_client.rs and cli/src/trusted_operation.rs
         ///     -> issue with sgx_tstd + std]
         /// cf https://github.com/scs/substrate-api-client/blob/master/examples/example_get_storage.rs
-        fn get_timestamp_rpc() -> Option<pallet_ocw_circuits::DisplaySkcdPackage> {
-            // TODO use proper struct to encode the request
-            // let input = crate::interstellarpbapigarble::GarbleIpfsRequest {
-            //     skcd_cid: skcd_cid_str,
-            // };
-            // let body_bytes = ocw_common::encode_body_grpc_web(input);
+        fn get_timestamp_rpc() -> Result<DisplaySkcdPackageCopy, Error<T>> {
+            // TODO? use proper struct to encode the request
+            let body_json = json!({
+                "jsonrpc": "2.0",
+                "id": "1",
+                "method":"state_getStorage",
+                // TODO compute this dynamically
+                "params": ["0x2c644167ae9423d1f0683de9002940b8bd009489ffa75ba4c0b3f4f6fed7414b"]
+            });
 
-            let endpoint = get_full_uri(API_ENDPOINT_GARBLE_URL);
+            let endpoint = get_node_uri();
 
-            let (resp_bytes, resp_content_type) =
-                ocw_common::fetch_from_remote_grpc_web(prost::bytes::Bytes::new(), &endpoint).map_err(|e| {
-                    log::error!("[ocw-garble] call_grpc_garble error: {:?}", e);
-                    <Error<T>>::HttpFetchingError
-                }).unwrap();
+            let (resp_bytes, resp_content_type) = ocw_common::fetch_from_remote_grpc_web(
+                prost::bytes::Bytes::from(serde_json::to_vec(&body_json).unwrap()),
+                &endpoint,
+                ocw_common::ContentType::Json,
+            )
+            .map_err(|e| {
+                log::error!("[ocw-garble] call_grpc_garble error: {:?}", e);
+                <Error<T>>::HttpFetchingError
+            })
+            .unwrap();
+
+            // let response: serde_json::Value =
+            //     serde_json::from_slice(&resp_bytes).map_err(|_e| Error::DeserializeError)?;
+            let response: DisplaySkcdPackageCopy =
+                ocw_common::decode_rpc_json(resp_bytes, resp_content_type);
+            log::info!("[ocw-garble] get_timestamp_rpc response : {:?}", response);
+            // TODO let response: DisplaySkcdPackageCopy = serde_json::from_slice(&resp_bytes)?;
+
+            Ok(response)
 
             // TODO
             // let resp: crate::interstellarpbapigarble::GarbleIpfsReply = ocw_common::decode_body_json(resp_bytes, resp_content_type);
-
 
             // use substrate_api_client::{Api, PlainTipExtrinsicParams, rpc::WsRpcClient};
 
@@ -366,7 +396,6 @@ pub mod pallet {
 
             // TODO
             // let response: pallet_ocw_circuits::DisplaySkcdPackage = serde_json::from_str(&response_decoded)?;
-            return None;
 
             /*
             use itp_rpc::{RpcRequest, RpcResponse, RpcReturnValue};
@@ -500,20 +529,6 @@ pub mod pallet {
                 "[ocw-garble] garble_and_strip_display_circuits_package_signed: ({:?} for {:?})",
                 sp_std::str::from_utf8(&tx_msg).expect("tx_msg utf8"),
                 who
-            );
-
-            // TODO TOREMOVE Timestamp::<T>::now()
-            // WITHOUT: "key_hashes.push(storage_value_key("Timestamp", "Now"));"
-            // --> [ocw-garble] garble_and_strip_display_circuits_package_signed: now = 0
-            // --> [ocw-garble] garble_and_strip_display_circuits_package_signed: now = 0
-            // WITH: "key_hashes.push(storage_value_key("Timestamp", "Now"));"
-            // --> same
-            let now = <pallet_timestamp::Pallet<T>>::get();
-            log::info!(
-                "[ocw-garble] garble_and_strip_display_circuits_package_signed: now = {:?}",
-                // FAIL now()
-                // FAIL "not found in `pallet_timestamp" pallet_timestamp::<T>::now()
-                now
             );
 
             // read DisplayCircuitsPackageValue directly from ocw-circuits
@@ -871,13 +886,18 @@ pub mod pallet {
 
             let endpoint = get_full_uri(API_ENDPOINT_GARBLE_URL);
 
-            let (resp_bytes, resp_content_type) =
-                ocw_common::fetch_from_remote_grpc_web(body_bytes, &endpoint).map_err(|e| {
-                    log::error!("[ocw-garble] call_grpc_garble error: {:?}", e);
-                    <Error<T>>::HttpFetchingError
-                })?;
+            let (resp_bytes, resp_content_type) = ocw_common::fetch_from_remote_grpc_web(
+                body_bytes,
+                &endpoint,
+                ocw_common::ContentType::GrpcWeb,
+            )
+            .map_err(|e| {
+                log::error!("[ocw-garble] call_grpc_garble error: {:?}", e);
+                <Error<T>>::HttpFetchingError
+            })?;
 
-            let resp: crate::interstellarpbapigarble::GarbleIpfsReply = ocw_common::decode_body_grpc_web(resp_bytes, resp_content_type);
+            let resp: crate::interstellarpbapigarble::GarbleIpfsReply =
+                ocw_common::decode_body_grpc_web(resp_bytes, resp_content_type);
             Ok(GrpcCallReplyKind::GarbleStandard(resp))
         }
 
@@ -913,13 +933,18 @@ pub mod pallet {
 
                 let endpoint = get_full_uri(API_ENDPOINT_GARBLE_STRIP_URL);
 
-                let (resp_bytes, resp_content_type) =
-                    ocw_common::fetch_from_remote_grpc_web(body_bytes, &endpoint).map_err(|e| {
-                        log::error!("[ocw-garble] call_grpc_garble_and_strip error: {:?}", e);
-                        <Error<T>>::HttpFetchingError
-                    })?;
+                let (resp_bytes, resp_content_type) = ocw_common::fetch_from_remote_grpc_web(
+                    body_bytes,
+                    &endpoint,
+                    ocw_common::ContentType::GrpcWeb,
+                )
+                .map_err(|e| {
+                    log::error!("[ocw-garble] call_grpc_garble_and_strip error: {:?}", e);
+                    <Error<T>>::HttpFetchingError
+                })?;
 
-                let resp: crate::interstellarpbapigarble::GarbleAndStripIpfsReply = ocw_common::decode_body_grpc_web(resp_bytes, resp_content_type);
+                let resp: crate::interstellarpbapigarble::GarbleAndStripIpfsReply =
+                    ocw_common::decode_body_grpc_web(resp_bytes, resp_content_type);
                 Ok(resp)
             }
 
@@ -1008,16 +1033,30 @@ pub mod pallet {
     /// construct the full endpoint URI using:
     /// - dynamic "URI root" from env
     /// - hardcoded API_ENDPOINT_GARBLE_STRIP_URL from "const" in this file
+    #[cfg(all(not(feature = "sgx"), feature = "std"))]
+    fn get_full_uri(endpoint: &str) -> String {
+        let uri_root = std::env::var("INTERSTELLAR_URI_ROOT_API_GARBLE").unwrap();
+
+        format!("{}{}", uri_root, endpoint)
+    }
     #[cfg(all(not(feature = "std"), feature = "sgx"))]
     fn get_full_uri(endpoint: &str) -> sgx_tstd::string::String {
         let uri_root = sgx_tstd::env::var("INTERSTELLAR_URI_ROOT_API_GARBLE").unwrap();
 
         format!("{}{}", uri_root, endpoint)
     }
-    #[cfg(all(not(feature = "sgx"), feature = "std"))]
-    fn get_full_uri(endpoint: &str) -> String {
-        let uri_root = std::env::var("INTERSTELLAR_URI_ROOT_API_GARBLE").unwrap();
 
-        format!("{}{}", uri_root, endpoint)
+    /// Like get_full_uri, but return the node URI(ie the address of `integritee-node` RPC)
+    #[cfg(all(not(feature = "sgx"), feature = "std"))]
+    fn get_node_uri() -> String {
+        let uri_root = std::env::var("INTERSTELLAR_URI_NODE").unwrap();
+
+        format!("{}", uri_root)
+    }
+    #[cfg(all(not(feature = "std"), feature = "sgx"))]
+    fn get_node_uri() -> sgx_tstd::string::String {
+        let uri_root = sgx_tstd::env::var("INTERSTELLAR_URI_NODE").unwrap();
+
+        format!("{}", uri_root)
     }
 }
