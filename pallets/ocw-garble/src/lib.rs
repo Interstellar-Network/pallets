@@ -271,29 +271,13 @@ pub mod pallet {
         }
     }
 
-    // TODO SHOULD be equally weighted!
-    // fn u8_to_digit(input: &u8) -> u8 {
-    //     match input {
-    //         0..=25 => 0,
-    //         26..=50 => 1,
-    //         51..=75 => 2,
-    //         76..=100 => 3,
-    //         101..=125 => 4,
-    //         126..=150 => 5,
-    //         151..=175 => 6,
-    //         176..=200 => 7,
-    //         201..=225 => 8,
-    //         226..=255 => 9,
-    //     }
-    // }
-
     impl<T: Config> Pallet<T> {
         /// Get the Storage using an RPC
         /// Needed b/c Storage access from a worker is not yet functional: https://github.com/integritee-network/worker/issues/976
         /// [FAIL cf core/rpc-client/src/direct_client.rs and cli/src/trusted_operation.rs
         ///     -> issue with sgx_tstd + std]
         /// cf https://github.com/scs/substrate-api-client/blob/master/examples/example_get_storage.rs
-        fn get_timestamp_rpc() -> Result<DisplaySkcdPackageCopy, Error<T>> {
+        fn get_ocw_circuits_storage_value() -> Result<DisplaySkcdPackageCopy, Error<T>> {
             // TODO? use proper struct to encode the request
             let body_json = json!({
                 "jsonrpc": "2.0",
@@ -316,161 +300,11 @@ pub mod pallet {
             })
             .unwrap();
 
-            // let response: serde_json::Value =
-            //     serde_json::from_slice(&resp_bytes).map_err(|_e| Error::DeserializeError)?;
             let response: DisplaySkcdPackageCopy =
                 ocw_common::decode_rpc_json(resp_bytes, resp_content_type);
-            log::info!("[ocw-garble] get_timestamp_rpc response : {:?}", response);
-            // TODO let response: DisplaySkcdPackageCopy = serde_json::from_slice(&resp_bytes)?;
+            log::info!("[ocw-garble] get_ocw_circuits_storage_value response : {:?}", response);
 
             Ok(response)
-
-            // TODO
-            // let resp: crate::interstellarpbapigarble::GarbleIpfsReply = ocw_common::decode_body_json(resp_bytes, resp_content_type);
-
-            // use substrate_api_client::{Api, PlainTipExtrinsicParams, rpc::WsRpcClient};
-
-            // // let url = format!("{}:{}", String::from("ws://127.0.0.1"), String::from("9990"));
-            // let url = "ws://127.0.0.1:9990";
-            // // TODO?
-            // // let endpoint = get_full_uri(API_ENDPOINT_GARBLE_URL);;
-
-            // let client = WsRpcClient::new(&url);
-            // let mut api = Api::<(), _, PlainTipExtrinsicParams>::new(client).unwrap();
-
-            // // get some plain storage value
-            // let result: u128 = api
-            //     .get_storage_value("Balances", "TotalIssuance", None)
-            //     .unwrap()
-            //     .unwrap();
-            // log::info!("[+] TotalIssuance is {}", result);
-
-            // use itc_rpc_client::direct_client::DirectClient;
-            // use itc_rpc_client::direct_client::DirectApi;
-            // use itp_rpc::RpcResponse;
-            // use itp_rpc::RpcReturnValue;
-            // use itp_types::DirectRequestStatus;
-            // use itp_utils::hex::FromHexPrefixed;
-
-            // cf cli/src/main.rs
-            // let cli = Cli::parse();
-
-            // // let direct_api = get_worker_api_direct(cli);
-            // let url = format!("{}:{}", String::from("ws://127.0.0.1"), String::from("9944"));
-            // log::info!("Connecting to integritee-node on '{}'", url);
-            // let direct_api = DirectClient::new(url);
-
-            // let request = format!("{{
-            //     \"jsonrpc\":\"2.0\",
-            //     \"id\":1,
-            //     \"method\": \"state_getStorage\",
-            //     \"params\": [\"{}\"]
-            // }}",
-            // // TODO compute Storage key dynamically
-            // String::from("0x2c644167ae9423d1f0683de9002940b8bd009489ffa75ba4c0b3f4f6fed7414b"));
-            // let response_str = direct_api.get(&request).expect("direct_api state_getStorage failed!");
-            // log::info!("response_str : {}", response_str);
-
-            // let response_decoded = decode_from_rpc_response(&response_str)?;
-            // fn decode_from_rpc_response(json_rpc_response: &str) -> Result<String, Error> {
-            //     let rpc_response: RpcResponse = serde_json::from_str(json_rpc_response)?;
-            //     let rpc_return_value =
-            //         RpcReturnValue::from_hex(&rpc_response.result).map_err(|e| Error::Custom(Box::new(e)))?;
-            //     let response_message = String::decode(&mut rpc_return_value.value.as_slice())?;
-            //     match rpc_return_value.status {
-            //         DirectRequestStatus::Ok => Ok(response_message),
-            //         _ => Err(Error::Status(response_message)),
-            //     }
-            // }
-            //
-            // TODO
-            // let rpc_response: RpcResponse = serde_json::from_str(&response_str).unwrap();
-            // let rpc_return_value =
-            //     RpcReturnValue::from_hex(&rpc_response.result).unwrap();
-            // let response_message = String::decode(&mut rpc_return_value.value.as_slice()).unwrap();
-            // let response_decoded = match rpc_return_value.status {
-            //     DirectRequestStatus::Ok => Some(response_message),
-            //     _ => None,
-            // };
-            // log::info!("response_decoded : {}", response_decoded.unwrap());
-
-            // TODO
-            // let response: pallet_ocw_circuits::DisplaySkcdPackage = serde_json::from_str(&response_decoded)?;
-
-            /*
-            use itp_rpc::{RpcRequest, RpcResponse, RpcReturnValue};
-
-            let jsonrpc_call: String = RpcRequest::compose_jsonrpc_call(
-                "state_getStorage".to_string(),
-                Default::default(),
-            )?;
-
-            // Send json rpc call to ws server.
-            let response_str = self.get(&jsonrpc_call)?;
-
-            let untrusted_url: String = decode_from_rpc_response(&response_str)?;
-
-            log::info!("[+] Got untrusted websocket url of worker: {}", untrusted_url);
-            Ok(untrusted_url)
-            */
-
-            /*
-            use sp_std::sync::mpsc::channel;
-            use teerex_primitives::Request;
-            use itp_rpc::{RpcRequest, RpcResponse, RpcReturnValue};
-            use itp_types::{DirectRequestStatus, TrustedOperationStatus};
-            use itc_rpc_client::direct_client::{DirectApi, DirectClient as DirectWorkerApi};
-            use itp_utils::hex::FromHexPrefixed;
-            use itp_utils::ToHexPrefixed;
-
-            // compose jsonrpc call
-            // TODO let data = Request { shard, cyphertext: operation_call_encrypted };
-            let data = Request {};
-            let rpc_method = "state_getStorage".to_owned();
-            let jsonrpc_call: String =
-                RpcRequest::compose_jsonrpc_call(rpc_method, vec![data.to_hex()]).unwrap();
-
-            // cf cli/src/main.rs
-            // let cli = Cli::parse();
-
-            // let direct_api = get_worker_api_direct(cli);
-            let url = format!("{}:{}", String::from("ws://127.0.0.1"), String::from("9944"));
-            log::info!("Connecting to integritee-node on '{}'", url);
-            let direct_api = DirectWorkerApi::new(url);
-
-            let (sender, receiver) = channel();
-            direct_api.watch(jsonrpc_call, sender);
-
-            loop {
-                match receiver.recv() {
-                    Ok(response) => {
-                        log::debug!("Response: {:?}", response);
-                        let response: RpcResponse = serde_json::from_str(&response).unwrap();
-                        if let Ok(return_value) = RpcReturnValue::from_hex(&response.result) {
-                            if return_value.status == DirectRequestStatus::Error {
-                                log::error!(
-                                    "[Error] {}",
-                                    String::decode(&mut return_value.value.as_slice()).unwrap()
-                                );
-                                direct_api.close().unwrap();
-                                return None
-                            }
-                            if !return_value.do_watch {
-                                direct_api.close().unwrap();
-                                return match Option::decode(&mut return_value.value.as_slice()) {
-                                    Ok(value_opt) => value_opt,
-                                    Err(_) => panic!("Error when decoding response"),
-                                }
-                            }
-                        };
-                    },
-                    Err(_) => {
-                        direct_api.close().unwrap();
-                        return None
-                    },
-                };
-            }
-            */
         }
 
         /*
@@ -550,7 +384,7 @@ pub mod pallet {
             //
             // let display_circuits_package = <DisplaySkcdPackageValueCopy<T>>::get();
             //
-            let display_circuits_package = Self::get_timestamp_rpc().unwrap();
+            let display_circuits_package = Self::get_ocw_circuits_storage_value().unwrap();
 
             log::info!(
                 "[ocw-garble] display_circuits_package: ({:?},{:?}) ({:?},{:?})",
@@ -574,9 +408,6 @@ pub mod pallet {
             let random_seed = <[u8; 32]>::decode(&mut random_seed.as_ref())
                 .expect("secure hashes should always be bigger than u32; qed");
             log::debug!("[ocw-garble] random_seed: {:?}", random_seed,);
-
-            // let mut random_numbers2: Vec<_> = random_seed.iter().map(|x| u8_to_digit(x)).collect();
-            // log::info!("[ocw-garble] digits2: {:?}", random_numbers2,);
 
             // https://github.com/paritytech/substrate/blob/master/frame/society/src/lib.rs#L1420
             // TODO is ChaChaRng secure? (or at least good enough)
