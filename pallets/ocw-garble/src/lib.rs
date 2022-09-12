@@ -136,7 +136,7 @@ pub mod pallet {
         message_nb_digits: u32,
     }
 
-    type PendingCircuitsType = BoundedVec<
+    pub type PendingCircuitsType = BoundedVec<
         DisplayStrippedCircuitsPackage,
         ConstU32<MAX_NUMBER_PENDING_CIRCUITS_PER_ACCOUNT>,
     >;
@@ -302,7 +302,10 @@ pub mod pallet {
 
             let response: DisplaySkcdPackageCopy =
                 ocw_common::decode_rpc_json(resp_bytes, resp_content_type);
-            log::info!("[ocw-garble] get_ocw_circuits_storage_value response : {:?}", response);
+            log::info!(
+                "[ocw-garble] get_ocw_circuits_storage_value response : {:?}",
+                response
+            );
 
             Ok(response)
         }
