@@ -18,8 +18,6 @@ pub mod pallet {
     use frame_system::ensure_signed;
     use frame_system::offchain::AppCrypto;
     use frame_system::offchain::CreateSignedTransaction;
-    use frame_system::offchain::SendSignedTransaction;
-    use frame_system::offchain::Signer;
     use frame_system::pallet_prelude::*;
     use rand::seq::SliceRandom;
     use rand::Rng;
@@ -28,10 +26,6 @@ pub mod pallet {
     use serde::Deserialize;
     use serde_json::json;
     use sp_core::crypto::KeyTypeId;
-    use sp_core::offchain::Duration;
-    use sp_runtime::offchain::storage::StorageValueRef;
-    use sp_runtime::offchain::storage_lock::BlockAndTime;
-    use sp_runtime::offchain::storage_lock::StorageLock;
     use sp_runtime::traits::BlockNumberProvider;
     use sp_runtime::transaction_validity::InvalidTransaction;
     use sp_runtime::RuntimeDebug;
@@ -225,6 +219,8 @@ pub mod pallet {
 
     #[pallet::hooks]
     impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
+        // TODO TOREMOVE "fn offchain_worker" not used in TEE
+        /*
         /// Offchain Worker entry point.
         ///
         /// By implementing `fn offchain_worker` you declare a new offchain worker.
@@ -243,6 +239,7 @@ pub mod pallet {
                 log::error!("[ocw-garble] offchain_worker error: {:?}", e);
             }
         }
+        */
     }
 
     #[pallet::validate_unsigned]
@@ -330,10 +327,90 @@ pub mod pallet {
             )
         }
         */
+
+        // TODO TOREMOVE #[pallet::weight(10000)]
+        pub fn callback_new_garbled_and_strip_signed(
+            who: T::AccountId,
+            message_pgarbled_cid: Vec<u8>,
+            message_packmsg_cid: Vec<u8>,
+            message_digits: Vec<u8>,
+            pinpad_pgarbled_cid: Vec<u8>,
+            pinpad_packmsg_cid: Vec<u8>,
+            pinpad_digits: Vec<u8>,
+        ) -> DispatchResult {
+            // TODO TOREMOVE
+            // let who = ensure_signed(origin.clone())?;
+
+            log::info!(
+                "[ocw-garble] callback_new_garbled_and_strip_signed: ({:?},{:?}) ({:?},{:?}) for {:?}",
+                sp_std::str::from_utf8(&message_pgarbled_cid).expect("message_pgarbled_cid utf8"),
+                sp_std::str::from_utf8(&message_packmsg_cid).expect("message_packmsg_cid utf8"),
+                sp_std::str::from_utf8(&pinpad_pgarbled_cid).expect("pinpad_pgarbled_cid utf8"),
+                sp_std::str::from_utf8(&pinpad_packmsg_cid).expect("pinpad_packmsg_cid utf8"),
+                who
+            );
+
+            Self::deposit_event(Event::NewGarbleAndStrippedIpfsCid(
+                message_pgarbled_cid.clone(),
+                message_packmsg_cid.clone(),
+                pinpad_pgarbled_cid.clone(),
+                pinpad_packmsg_cid.clone(),
+            ));
+
+            // store the metadata using the pallet-tx-validation
+            // (only in "garble+strip" mode b/c else it makes no sense)
+            // TODO? Call?
+            // pallet_tx_validation::Call::<T>::store_metadata {
+            //     ipfs_cid: pgarbled_cid,
+            //     circuit_digits: circuit_digits,
+            // };
+            pallet_tx_validation::store_metadata_aux::<T>(
+                &who,
+                message_pgarbled_cid.clone(),
+                message_digits.clone(),
+                pinpad_digits.clone(),
+            )
+            .expect("store_metadata_aux failed!");
+
+            // and update our internal map of pending circuits for the given account
+            // this is USED via RPC by the app, not directly!
+            // "append if exists, create if not"
+            // TODO done in two steps, is there a way to do it atomically?
+            let mut current_pending_circuits: PendingCircuitsType =
+                <AccountToPendingCircuitsMap<T>>::try_get(&who).unwrap_or_default();
+            current_pending_circuits
+                .try_push(DisplayStrippedCircuitsPackage {
+                    message_pgarbled_cid: TryInto::<BoundedVec<u8, ConstU32<64>>>::try_into(
+                        message_pgarbled_cid,
+                    )
+                    .unwrap(),
+                    message_packmsg_cid: TryInto::<BoundedVec<u8, ConstU32<64>>>::try_into(
+                        message_packmsg_cid,
+                    )
+                    .unwrap(),
+                    pinpad_pgarbled_cid: TryInto::<BoundedVec<u8, ConstU32<64>>>::try_into(
+                        pinpad_pgarbled_cid,
+                    )
+                    .unwrap(),
+                    pinpad_packmsg_cid: TryInto::<BoundedVec<u8, ConstU32<64>>>::try_into(
+                        pinpad_packmsg_cid,
+                    )
+                    .unwrap(),
+                    message_nb_digits: message_digits.len().try_into().unwrap(),
+                })
+                .unwrap();
+            <AccountToPendingCircuitsMap<T>>::insert(who, current_pending_circuits);
+
+            log::info!("[ocw-garble] callback_new_garbled_and_strip_signed: done!");
+
+            Ok(())
+        }
     }
 
     #[pallet::call]
     impl<T: Config> Pallet<T> {
+        // TODO TOREMOVE
+        /*
         #[pallet::weight(10000)]
         pub fn garble_standard_signed(origin: OriginFor<T>, skcd_cid: Vec<u8>) -> DispatchResult {
             let who = ensure_signed(origin)?;
@@ -355,13 +432,14 @@ pub mod pallet {
 
             Ok(())
         }
+        */
 
         #[pallet::weight(10000)]
         pub fn garble_and_strip_display_circuits_package_signed(
             origin: OriginFor<T>,
             tx_msg: Vec<u8>,
         ) -> DispatchResult {
-            let who = ensure_signed(origin)?;
+            let who = ensure_signed(origin.clone())?;
             log::info!(
                 "[ocw-garble] garble_and_strip_display_circuits_package_signed: ({:?} for {:?})",
                 sp_std::str::from_utf8(&tx_msg).expect("tx_msg utf8"),
@@ -437,15 +515,38 @@ pub mod pallet {
             // );
             //
             // FAIL: apparently "fn offchain_worker" is NOT called?
-            Self::call_grpc_garble_and_strip(
+            let result_grpc_call = Self::call_grpc_garble_and_strip(
                 display_circuits_package.message_skcd_cid.to_vec(),
                 display_circuits_package.pinpad_skcd_cid.to_vec(),
                 tx_msg,
                 message_digits,
                 pinpad_digits,
-            );
+            )
+            .expect("call_grpc_garble_and_strip failed!");
 
+            let (message_reply, message_digits, pinpad_reply, pinpad_digits) =
+                match result_grpc_call {
+                    GrpcCallReplyKind::GarbleAndStrip(
+                        message_reply,
+                        message_digits,
+                        pinpad_reply,
+                        pinpad_digits,
+                    ) => (message_reply, message_digits, pinpad_reply, pinpad_digits),
+                    _ => panic!("match result_grpc_call failed!"),
+                };
+
+            // TODO TOREMOVE
             // Self::finalize_grpc_call(result_grpc_call);
+
+            Self::callback_new_garbled_and_strip_signed(
+                who,
+                message_reply.pgarbled_cid.bytes().collect(),
+                message_reply.packmsg_cid.bytes().collect(),
+                message_digits.to_vec(),
+                pinpad_reply.pgarbled_cid.bytes().collect(),
+                pinpad_reply.packmsg_cid.bytes().collect(),
+                pinpad_digits.to_vec(),
+            );
 
             Ok(())
         }
@@ -453,6 +554,7 @@ pub mod pallet {
         /// Called at the end of offchain_worker to publish the result
         /// Not meant to be called by a user
         // TODO use "with signed payload" and check if expected key?
+        // TODO TOREMOVE
         #[pallet::weight(10000)]
         pub fn callback_new_garbled_signed(
             origin: OriginFor<T>,
@@ -466,80 +568,6 @@ pub mod pallet {
             );
 
             Self::deposit_event(Event::NewGarbledIpfsCid(pgarbled_cid));
-            Ok(())
-        }
-
-        #[pallet::weight(10000)]
-        pub fn callback_new_garbled_and_strip_signed(
-            origin: OriginFor<T>,
-            message_pgarbled_cid: Vec<u8>,
-            message_packmsg_cid: Vec<u8>,
-            message_digits: Vec<u8>,
-            pinpad_pgarbled_cid: Vec<u8>,
-            pinpad_packmsg_cid: Vec<u8>,
-            pinpad_digits: Vec<u8>,
-        ) -> DispatchResult {
-            let who = ensure_signed(origin.clone())?;
-            log::info!(
-                "[ocw-garble] callback_new_garbled_and_strip_signed: ({:?},{:?}) ({:?},{:?}) for {:?}",
-                sp_std::str::from_utf8(&message_pgarbled_cid).expect("message_pgarbled_cid utf8"),
-                sp_std::str::from_utf8(&message_packmsg_cid).expect("message_packmsg_cid utf8"),
-                sp_std::str::from_utf8(&pinpad_pgarbled_cid).expect("pinpad_pgarbled_cid utf8"),
-                sp_std::str::from_utf8(&pinpad_packmsg_cid).expect("pinpad_packmsg_cid utf8"),
-                who
-            );
-
-            Self::deposit_event(Event::NewGarbleAndStrippedIpfsCid(
-                message_pgarbled_cid.clone(),
-                message_packmsg_cid.clone(),
-                pinpad_pgarbled_cid.clone(),
-                pinpad_packmsg_cid.clone(),
-            ));
-
-            // store the metadata using the pallet-tx-validation
-            // (only in "garble+strip" mode b/c else it makes no sense)
-            // TODO? Call?
-            // pallet_tx_validation::Call::<T>::store_metadata {
-            //     ipfs_cid: pgarbled_cid,
-            //     circuit_digits: circuit_digits,
-            // };
-            pallet_tx_validation::store_metadata_aux::<T>(
-                origin,
-                message_pgarbled_cid.clone(),
-                message_digits.clone(),
-                pinpad_digits.clone(),
-            )
-            .expect("store_metadata_aux failed!");
-
-            // and update our internal map of pending circuits for the given account
-            // this is USED via RPC by the app, not directly!
-            // "append if exists, create if not"
-            // TODO done in two steps, is there a way to do it atomically?
-            let mut current_pending_circuits: PendingCircuitsType =
-                <AccountToPendingCircuitsMap<T>>::try_get(&who).unwrap_or_default();
-            current_pending_circuits
-                .try_push(DisplayStrippedCircuitsPackage {
-                    message_pgarbled_cid: TryInto::<BoundedVec<u8, ConstU32<64>>>::try_into(
-                        message_pgarbled_cid,
-                    )
-                    .unwrap(),
-                    message_packmsg_cid: TryInto::<BoundedVec<u8, ConstU32<64>>>::try_into(
-                        message_packmsg_cid,
-                    )
-                    .unwrap(),
-                    pinpad_pgarbled_cid: TryInto::<BoundedVec<u8, ConstU32<64>>>::try_into(
-                        pinpad_pgarbled_cid,
-                    )
-                    .unwrap(),
-                    pinpad_packmsg_cid: TryInto::<BoundedVec<u8, ConstU32<64>>>::try_into(
-                        pinpad_packmsg_cid,
-                    )
-                    .unwrap(),
-                    message_nb_digits: message_digits.len().try_into().unwrap(),
-                })
-                .unwrap();
-            <AccountToPendingCircuitsMap<T>>::insert(who, current_pending_circuits);
-
             Ok(())
         }
     }
@@ -603,108 +631,112 @@ pub mod pallet {
     impl<T: Config> Pallet<T> {
         /// Append a new number to the tail of the list, removing an element from the head if reaching
         ///   the bounded length.
-        fn append_or_replace_skcd_hash(
-            grpc_kind: GrpcCallKind,
-            // optional: only if GrpcCallKind::GarbleStandard
-            skcd_cid: Option<Vec<u8>>,
-            // optional: only if GrpcCallKind::GarbleAndStrip
-            message_skcd_ipfs_cid: Option<Vec<u8>>,
-            pinpad_skcd_ipfs_cid: Option<Vec<u8>>,
-            tx_msg: Option<Vec<u8>>,
-            message_digits: Option<Vec<u8>>,
-            pinpad_digits: Option<Vec<u8>>,
-        ) {
-            let key = Self::derived_key();
-            let data = IndexingData {
-                block_number: 1,
-                grpc_kind: grpc_kind,
-                // optional: only if GrpcCallKind::GarbleStandard
-                skcd_ipfs_cid: skcd_cid,
-                // optional: only if GrpcCallKind::GarbleAndStrip
-                message_skcd_ipfs_cid: message_skcd_ipfs_cid,
-                pinpad_skcd_ipfs_cid: pinpad_skcd_ipfs_cid,
-                tx_msg: tx_msg,
-                message_digits: message_digits,
-                pinpad_digits: pinpad_digits,
-            };
-            sp_io::offchain_index::set(&key, &data.encode());
-        }
+        // TODO TOREMOVE: "fn offchain_worker" is NOT used in TEE
+        // fn append_or_replace_skcd_hash(
+        //     grpc_kind: GrpcCallKind,
+        //     // optional: only if GrpcCallKind::GarbleStandard
+        //     skcd_cid: Option<Vec<u8>>,
+        //     // optional: only if GrpcCallKind::GarbleAndStrip
+        //     message_skcd_ipfs_cid: Option<Vec<u8>>,
+        //     pinpad_skcd_ipfs_cid: Option<Vec<u8>>,
+        //     tx_msg: Option<Vec<u8>>,
+        //     message_digits: Option<Vec<u8>>,
+        //     pinpad_digits: Option<Vec<u8>>,
+        // ) {
+        //     let key = Self::derived_key();
+        //     let data = IndexingData {
+        //         block_number: 1,
+        //         grpc_kind: grpc_kind,
+        //         // optional: only if GrpcCallKind::GarbleStandard
+        //         skcd_ipfs_cid: skcd_cid,
+        //         // optional: only if GrpcCallKind::GarbleAndStrip
+        //         message_skcd_ipfs_cid: message_skcd_ipfs_cid,
+        //         pinpad_skcd_ipfs_cid: pinpad_skcd_ipfs_cid,
+        //         tx_msg: tx_msg,
+        //         message_digits: message_digits,
+        //         pinpad_digits: pinpad_digits,
+        //     };
+        //     sp_io::offchain_index::set(&key, &data.encode());
+        // }
 
         /// Check if we have fetched the data before. If yes, we can use the cached version
         ///   stored in off-chain worker storage `storage`. If not, we fetch the remote info and
         ///   write the info into the storage for future retrieval.
-        fn process_if_needed(_block_number: T::BlockNumber) -> Result<(), Error<T>> {
-            // Reading back the off-chain indexing value. It is exactly the same as reading from
-            // ocw local storage.
-            //
-            // IMPORTANT: writing using eg StorageValue(mutate,set,kill,take) works but DOES NOTHING
-            // During the next call, the old value is there!
-            // So we MUST use StorageValueRef/LocalStorage to write.
-            let key = Self::derived_key();
-            let oci_mem = StorageValueRef::persistent(&key);
+        //
+        // TODO TOREMOVE: "fn offchain_worker" is NOT used in TEE
+        // fn process_if_needed(_block_number: T::BlockNumber) -> Result<(), Error<T>> {
+        //     // Reading back the off-chain indexing value. It is exactly the same as reading from
+        //     // ocw local storage.
+        //     //
+        //     // IMPORTANT: writing using eg StorageValue(mutate,set,kill,take) works but DOES NOTHING
+        //     // During the next call, the old value is there!
+        //     // So we MUST use StorageValueRef/LocalStorage to write.
+        //     let key = Self::derived_key();
+        //     let oci_mem = StorageValueRef::persistent(&key);
 
-            let indexing_data = oci_mem
-                .get::<IndexingData>()
-                .unwrap_or(Some(IndexingData::default()))
-                .unwrap_or(IndexingData::default());
+        //     let indexing_data = oci_mem
+        //         .get::<IndexingData>()
+        //         .unwrap_or(Some(IndexingData::default()))
+        //         .unwrap_or(IndexingData::default());
 
-            let to_process_block_number = indexing_data.block_number;
+        //     let to_process_block_number = indexing_data.block_number;
 
-            // TODO proper job queue; or at least proper CHECK
-            if to_process_block_number == 0 {
-                log::info!("[ocw-garble] nothing to do, returning...");
-                return Ok(());
-            }
+        //     // TODO proper job queue; or at least proper CHECK
+        //     if to_process_block_number == 0 {
+        //         log::info!("[ocw-garble] nothing to do, returning...");
+        //         return Ok(());
+        //     }
 
-            // Since off-chain storage can be accessed by off-chain workers from multiple runs, it is important to lock
-            //   it before doing heavy computations or write operations.
-            //
-            // There are four ways of defining a lock:
-            //   1) `new` - lock with default time and block exipration
-            //   2) `with_deadline` - lock with default block but custom time expiration
-            //   3) `with_block_deadline` - lock with default time but custom block expiration
-            //   4) `with_block_and_time_deadline` - lock with custom time and block expiration
-            // Here we choose the most custom one for demonstration purpose.
-            let mut lock = StorageLock::<BlockAndTime<Self>>::with_block_and_time_deadline(
-                LOCK_KEY,
-                LOCK_BLOCK_EXPIRATION,
-                Duration::from_millis(LOCK_TIMEOUT_EXPIRATION),
-            );
+        //     // Since off-chain storage can be accessed by off-chain workers from multiple runs, it is important to lock
+        //     //   it before doing heavy computations or write operations.
+        //     //
+        //     // There are four ways of defining a lock:
+        //     //   1) `new` - lock with default time and block exipration
+        //     //   2) `with_deadline` - lock with default block but custom time expiration
+        //     //   3) `with_block_deadline` - lock with default time but custom block expiration
+        //     //   4) `with_block_and_time_deadline` - lock with custom time and block expiration
+        //     // Here we choose the most custom one for demonstration purpose.
+        //     let mut lock = StorageLock::<BlockAndTime<Self>>::with_block_and_time_deadline(
+        //         LOCK_KEY,
+        //         LOCK_BLOCK_EXPIRATION,
+        //         Duration::from_millis(LOCK_TIMEOUT_EXPIRATION),
+        //     );
 
-            // We try to acquire the lock here. If failed, we know the `fetch_n_parse` part inside is being
-            //   executed by previous run of ocw, so the function just returns.
-            if let Ok(_guard) = lock.try_lock() {
-                // NOTE: remove the task from the "job queue" wether it worked or not
-                // TODO better? But in this case we should only retry in case of "remote error"
-                // and NOT retry if eg the given hash is not a valid IPFS hash
-                //
-                // DO NOT use "sp_io::offchain_index::set"!
-                // We MUST use "StorageValueRef::persistent" else the value is not updated??
-                oci_mem.set(&IndexingData::default());
+        //     // We try to acquire the lock here. If failed, we know the `fetch_n_parse` part inside is being
+        //     //   executed by previous run of ocw, so the function just returns.
+        //     if let Ok(_guard) = lock.try_lock() {
+        //         // NOTE: remove the task from the "job queue" wether it worked or not
+        //         // TODO better? But in this case we should only retry in case of "remote error"
+        //         // and NOT retry if eg the given hash is not a valid IPFS hash
+        //         //
+        //         // DO NOT use "sp_io::offchain_index::set"!
+        //         // We MUST use "StorageValueRef::persistent" else the value is not updated??
+        //         oci_mem.set(&IndexingData::default());
 
-                let result_grpc_call = match indexing_data.grpc_kind {
-                    GrpcCallKind::GarbleStandard => Self::call_grpc_garble(
-                        indexing_data.skcd_ipfs_cid.expect("missing skcd_ipfs_cid"),
-                    ),
-                    GrpcCallKind::GarbleAndStrip => Self::call_grpc_garble_and_strip(
-                        indexing_data
-                            .message_skcd_ipfs_cid
-                            .expect("missing message_skcd_ipfs_cid"),
-                        indexing_data
-                            .pinpad_skcd_ipfs_cid
-                            .expect("missing pinpad_skcd_ipfs_cid"),
-                        indexing_data.tx_msg.expect("missing tx_msg"),
-                        indexing_data
-                            .message_digits
-                            .expect("missing message_digits"),
-                        indexing_data.pinpad_digits.expect("missing pinpad_digits"),
-                    ),
-                };
+        //         let result_grpc_call = match indexing_data.grpc_kind {
+        //             GrpcCallKind::GarbleStandard => Self::call_grpc_garble(
+        //                 indexing_data.skcd_ipfs_cid.expect("missing skcd_ipfs_cid"),
+        //             ),
+        //             GrpcCallKind::GarbleAndStrip => Self::call_grpc_garble_and_strip(
+        //                 indexing_data
+        //                     .message_skcd_ipfs_cid
+        //                     .expect("missing message_skcd_ipfs_cid"),
+        //                 indexing_data
+        //                     .pinpad_skcd_ipfs_cid
+        //                     .expect("missing pinpad_skcd_ipfs_cid"),
+        //                 indexing_data.tx_msg.expect("missing tx_msg"),
+        //                 indexing_data
+        //                     .message_digits
+        //                     .expect("missing message_digits"),
+        //                 indexing_data.pinpad_digits.expect("missing pinpad_digits"),
+        //             ),
+        //         };
 
-                Self::finalize_grpc_call(result_grpc_call)
-            }
-            Ok(())
-        }
+        //         // TODO TOREMOVE
+        //         // Self::finalize_grpc_call(result_grpc_call)
+        //     }
+        //     Ok(())
+        // }
 
         /// Call the GRPC endpoint API_ENDPOINT_GARBLE_URL, encoding the request as grpc-web, and decoding the response
         ///
@@ -803,56 +835,65 @@ pub mod pallet {
             ))
         }
 
+        // TODO TOREMOVE does not work in TEE?
+        /*
         /// Called at the end of process_if_needed/offchain_worker
         /// Publish the result back via send_signed_transaction(and Event)
         ///
         /// param: result_grpc_call: returned by call_grpc_garble_and_strip/call_grpc_garble
-        fn finalize_grpc_call(result_grpc_call: Result<GrpcCallReplyKind, Error<T>>) {
-            match result_grpc_call {
-                Ok(result_reply) => {
-                    // Using `send_signed_transaction` associated type we create and submit a transaction
-                    // representing the call we've just created.
-                    // `send_signed_transaction()` return type is `Option<(Account<T>, Result<(), ()>)>`. It is:
-                    //   - `None`: no account is available for sending transaction
-                    //   - `Some((account, Ok(())))`: transaction is successfully sent
-                    //   - `Some((account, Err(())))`: error occurred when sending the transaction
-                    let signer = Signer::<T, <T as Config>::AuthorityId>::all_accounts();
-                    if !signer.can_sign() {
-                        log::error!(
-                            "[ocw-garble] No local accounts available. Consider adding one via `author_insertKey` RPC[ALTERNATIVE DEV ONLY check 'if config.offchain_worker.enabled' in service.rs]"
-                        );
-                    }
+        //
+        // [2022-09-12T14:38:33Z WARN  sp_io::crypto] crypto::sr25519_public_key unimplemented
+        // [2022-09-12T14:38:33Z WARN  sp_io::crypto] crypto::sr25519_public_key unimplemented
+        // [2022-09-12T14:38:33Z WARN  ita_sgx_runtime] Unable to create signed payload: <wasm:stripped>
+        // [2022-09-12T14:38:33Z INFO  pallet_ocw_garble::pallet] [ocw-garble] finalize_grpc_call sent number : 0
+        //
+        // fn finalize_grpc_call(result_grpc_call: Result<GrpcCallReplyKind, Error<T>>) {
+        //     match result_grpc_call {
+        //         Ok(result_reply) => {
+        //             // Using `send_signed_transaction` associated type we create and submit a transaction
+        //             // representing the call we've just created.
+        //             // `send_signed_transaction()` return type is `Option<(Account<T>, Result<(), ()>)>`. It is:
+        //             //   - `None`: no account is available for sending transaction
+        //             //   - `Some((account, Ok(())))`: transaction is successfully sent
+        //             //   - `Some((account, Err(())))`: error occurred when sending the transaction
+        //             let signer = Signer::<T, <T as Config>::AuthorityId>::all_accounts();
+        //             if !signer.can_sign() {
+        //                 log::error!(
+        //                     "[ocw-garble] No local accounts available. Consider adding one via `author_insertKey` RPC[ALTERNATIVE DEV ONLY check 'if config.offchain_worker.enabled' in service.rs]"
+        //                 );
+        //             }
 
-                    let results = signer.send_signed_transaction(|_account| match &result_reply {
-                        GrpcCallReplyKind::GarbleStandard(reply) => {
-                            Call::callback_new_garbled_signed {
-                                pgarbled_cid: reply.pgarbled_cid.bytes().collect(),
-                            }
-                        }
-                        GrpcCallReplyKind::GarbleAndStrip(
-                            message_reply,
-                            message_digits,
-                            pinpad_reply,
-                            pinpad_digits,
-                        ) => Call::callback_new_garbled_and_strip_signed {
-                            message_pgarbled_cid: message_reply.pgarbled_cid.bytes().collect(),
-                            message_packmsg_cid: message_reply.packmsg_cid.bytes().collect(),
-                            message_digits: message_digits.to_vec(),
-                            pinpad_pgarbled_cid: pinpad_reply.pgarbled_cid.bytes().collect(),
-                            pinpad_packmsg_cid: pinpad_reply.packmsg_cid.bytes().collect(),
-                            pinpad_digits: pinpad_digits.to_vec(),
-                        },
-                    });
-                    log::info!(
-                        "[ocw-garble] finalize_grpc_call sent number : {:#?}",
-                        results.len()
-                    );
-                }
-                Err(err) => {
-                    log::error!("[ocw-garble] finalize_grpc_call: error: {:?}", err);
-                }
-            }
-        }
+        //             let results = signer.send_signed_transaction(|_account| match &result_reply {
+        //                 GrpcCallReplyKind::GarbleStandard(reply) => {
+        //                     Call::callback_new_garbled_signed {
+        //                         pgarbled_cid: reply.pgarbled_cid.bytes().collect(),
+        //                     }
+        //                 }
+        //                 GrpcCallReplyKind::GarbleAndStrip(
+        //                     message_reply,
+        //                     message_digits,
+        //                     pinpad_reply,
+        //                     pinpad_digits,
+        //                 ) => Call::callback_new_garbled_and_strip_signed {
+        //                     message_pgarbled_cid: message_reply.pgarbled_cid.bytes().collect(),
+        //                     message_packmsg_cid: message_reply.packmsg_cid.bytes().collect(),
+        //                     message_digits: message_digits.to_vec(),
+        //                     pinpad_pgarbled_cid: pinpad_reply.pgarbled_cid.bytes().collect(),
+        //                     pinpad_packmsg_cid: pinpad_reply.packmsg_cid.bytes().collect(),
+        //                     pinpad_digits: pinpad_digits.to_vec(),
+        //                 },
+        //             });
+        //             log::info!(
+        //                 "[ocw-garble] finalize_grpc_call sent number : {:#?}",
+        //                 results.len()
+        //             );
+        //         }
+        //         Err(err) => {
+        //             log::error!("[ocw-garble] finalize_grpc_call: error: {:?}", err);
+        //         }
+        //     }
+        // }
+        */
     }
 
     // needed for with_block_and_time_deadline()

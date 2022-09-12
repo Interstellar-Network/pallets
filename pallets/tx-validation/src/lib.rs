@@ -163,15 +163,24 @@ pub mod pallet {
     /// for now we reference the whole "DisplayStrippedCircuitsPackage" by just using the message_pgarbled_cid
     /// so we only pass "message_pgarbled_cid"
     pub fn store_metadata_aux<T: Config>(
-        origin: OriginFor<T>,
+        who: &T::AccountId,
         message_pgarbled_cid: Vec<u8>,
         message_digits: Vec<u8>,
         pinpad_digits: Vec<u8>,
     ) -> DispatchResult {
+        // TODO TOREMOVE
         // Check that the extrinsic was signed and get the signer.
         // This function will return an error if the extrinsic is not signed.
         // https://docs.substrate.io/v3/runtime/origins
-        let who = ensure_signed(origin)?;
+        // let who = ensure_signed(origin)?;
+
+        log::info!(
+            "[tx-validation] store_metadata_aux: who = {:?}, message_pgarbled_cid = {:?}, message_digits = {:?}, pinpad_digits = {:?}",
+            who,
+            sp_std::str::from_utf8(&message_pgarbled_cid).expect("message_pgarbled_cid utf8"),
+            &message_digits,
+            &pinpad_digits,
+        );
 
         crate::Pallet::<T>::deposit_event(Event::DEBUGNewDigitsSet {
             message_digits: message_digits.clone(),
@@ -189,6 +198,7 @@ pub mod pallet {
                     .unwrap(),
             },
         );
+        log::info!("[tx-validation] store_metadata_aux: done!");
 
         Ok(())
     }
@@ -207,7 +217,12 @@ pub mod pallet {
             message_digits: Vec<u8>,
             pinpad_digits: Vec<u8>,
         ) -> DispatchResult {
-            store_metadata_aux::<T>(origin, message_pgarbled_cid, message_digits, pinpad_digits)
+            // Check that the extrinsic was signed and get the signer.
+            // This function will return an error if the extrinsic is not signed.
+            // https://docs.substrate.io/v3/runtime/origins
+            let who = ensure_signed(origin)?;
+
+            store_metadata_aux::<T>(&who, message_pgarbled_cid, message_digits, pinpad_digits)
         }
 
         // NOTE: for now this extrinsic is called from the front-end so input_digits is ascii
