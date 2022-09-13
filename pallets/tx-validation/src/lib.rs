@@ -152,6 +152,8 @@ pub mod pallet {
     // Errors inform users that something went wrong.
     #[pallet::error]
     pub enum Error<T> {
+        // The given ipfs_cid was NOT present in CircuitServerMetadataMap
+        CircuitNotFound,
         // wrong OTP/permutation given -> Transaction failed
         TxWrongCodeGiven,
         // inputs SHOULD be [0;9] or ['0';'9']
@@ -237,13 +239,19 @@ pub mod pallet {
             // This function will return an error if the extrinsic is not signed.
             // https://docs.substrate.io/v3/runtime/origins
             let who = ensure_signed(origin)?;
+            log::info!(
+                "[tx-validation] check_input: who = {:?}, ipfs_cid = {:?}, input_digits = {:?}",
+                &who,
+                sp_std::str::from_utf8(&ipfs_cid).expect("ipfs_cid utf8"),
+                input_digits,
+            );
 
             // Compare with storage
             let display_validation_package = <CircuitServerMetadataMap<T>>::get(
                 who.clone(),
                 TryInto::<BoundedVec<u8, ConstU32<64>>>::try_into(ipfs_cid).unwrap(),
             )
-            .unwrap();
+            .ok_or(Error::<T>::CircuitNotFound)?;
 
             // convert ascii to digits
             // first step: Vec<u8> to str; that way we can then use "to_digit"
@@ -262,10 +270,14 @@ pub mod pallet {
             log::info!(
                 "[tx-validation] check_input: input_digits_str = {:?}, input_digits_int = {:?}, pinpad_permutation = {:?}",
                 input_digits_str,
-                sp_std::str::from_utf8(&input_digits_int).expect("input_digits_int utf8"),
-                sp_std::str::from_utf8(&pinpad_permutation).expect("pinpad_permutation utf8"),
+                input_digits_int,
+                pinpad_permutation,
             );
 
+            // map user inputs -> true inputs
+            // eg user inputs:          [0,1]
+            // eg pinpad_permutation:   [9,8,7,0,1,...]
+            // true inputs -->          [9,8]
             let computed_inputs_from_permutation: Vec<u8> = input_digits_int
                 .into_iter()
                 .map(|pinpad_index| {
@@ -283,10 +295,12 @@ pub mod pallet {
 
             // TODO remove the key from the map; we DO NOT want to allow retrying
             if display_validation_package.message_digits == computed_inputs_from_permutation {
+                log::info!("[tx-validation] TxPass",);
                 Self::deposit_event(Event::TxPass { account_id: who });
                 // TODO on success: call next step/callback (ie pallet-tx-XXX)
                 return Ok(());
             } else {
+                log::info!("[tx-validation] TxFail",);
                 Self::deposit_event(Event::TxFail { account_id: who });
                 return Err(Error::<T>::TxWrongCodeGiven)?;
             }
