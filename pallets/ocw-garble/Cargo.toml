@@ -96,6 +96,9 @@ std = [
 sgx = [
     "ocw-common/sgx",
 	"sgx_tstd",
+	# Needed to match [patch.crates-io] getrandom in enclave-runtime/Cargo.toml
+	# IMPORTANT without this the "seed" in ocw-garble is always the same!
+	"rand/getrandom",
 	# TEMP
 	# "itp-rpc/sgx",
 ]

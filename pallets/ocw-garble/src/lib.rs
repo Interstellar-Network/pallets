@@ -14,7 +14,6 @@ pub use pallet::*;
 pub mod pallet {
     use codec::{Decode, Encode};
     use frame_support::pallet_prelude::*;
-    use frame_support::traits::Randomness;
     use frame_system::ensure_signed;
     use frame_system::offchain::AppCrypto;
     use frame_system::offchain::CreateSignedTransaction;
@@ -102,7 +101,6 @@ pub mod pallet {
         type Call: From<Call<Self>>;
         /// The identifier type for an offchain worker.
         type AuthorityId: AppCrypto<Self::Public, Self::Signature>;
-        type MyRandomness: Randomness<Self::Hash, Self::BlockNumber>;
     }
 
     /// Easy way to make a link b/w a "message" and "pinpad" circuits
@@ -478,29 +476,32 @@ pub mod pallet {
             );
 
             // Generate random digits
+            // FAIL does not seem to be random in enclave?
             // cf https://github.com/paritytech/substrate/blob/master/frame/lottery/src/lib.rs#L506
-            let nonce = Self::get_and_increment_nonce();
-            let (random_seed, _) = T::MyRandomness::random(&nonce);
+            // let nonce = Self::get_and_increment_nonce();
+            // let (random_seed, _) = T::MyRandomness::random(&nonce);
             // random_seed is a Hash so 256 -> 32 u8 is fine
-            // typically we need (2-4) digits(NOT u8) for the message
-            // and 10 digits(NOT u8) for the pinpad
             // so we have more than enough
             // TODO we could(SHOULD) split "random_seed" 4 bits by 4 bits b/c that is enough for [0-10] range
-            let random_seed = <[u8; 32]>::decode(&mut random_seed.as_ref())
-                .expect("secure hashes should always be bigger than u32; qed");
-            log::debug!("[ocw-garble] random_seed: {:?}", random_seed,);
+            // let random_seed = <[u8; 32]>::decode(&mut random_seed.as_ref())
+            //     .expect("secure hashes should always be bigger than u32; qed");
 
             // https://github.com/paritytech/substrate/blob/master/frame/society/src/lib.rs#L1420
             // TODO is ChaChaRng secure? (or at least good enough)
-            let mut rng = ChaChaRng::from_seed(random_seed);
+            let mut rng = ChaChaRng::from_entropy();
+
+            // typically we need (2-4) digits for the message
+            // and 10 digits(NOT u8) for the pinpad
+            // MUST SHUFFLE the pinpad digits, NOT randomize them
+            // each digit from 0 to 10 (included!) MUST be in the final "digits"
             let mut pinpad_digits: Vec<u8> = (0..10).collect();
             pinpad_digits.shuffle(&mut rng);
-            log::info!("[ocw-garble] pinpad_digits: {:?}", pinpad_digits,);
-
-            // MUST SHUFFLE the pinpad digits, NOT randomize them
-            // each [0-10] MUST be in the final "digits"
             let message_digits: Vec<u8> = (0..2).map(|_| rng.gen_range(0..10)).collect();
-            log::info!("[ocw-garble] message_digits: {:?}", message_digits,);
+            log::info!(
+                "[ocw-garble] pinpad_digits: {:?}, message_digits: {:?}",
+                pinpad_digits,
+                message_digits,
+            );
 
             // Self::append_or_replace_skcd_hash(
             //     GrpcCallKind::GarbleAndStrip,
