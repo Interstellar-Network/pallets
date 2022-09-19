@@ -51,6 +51,7 @@ fn test_check_input_ok(inputs: Vec<u8>) {
             inputs
         ));
         System::assert_last_event(crate::Event::TxPass { account_id: 1 }.into());
+        assert_eq!(TxRegistry::tx_results_map(account_id).unwrap().len(), 1);
     });
 }
 
@@ -92,6 +93,7 @@ fn check_input_wrong_code_tx_fail() {
         //     TxValidation::check_input(Origin::signed(account_id), ipfs_cid.clone(), vec![0, 0]),
         //     Error::<Test>::TxWrongInputGiven
         // );
+        assert_eq!(TxRegistry::tx_results_map(account_id).unwrap().len(), 1);
     });
 }
 

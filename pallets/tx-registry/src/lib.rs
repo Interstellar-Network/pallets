@@ -40,9 +40,9 @@ pub mod pallet {
         /// SHOULD match the second key of "type CircuitServerMetadataMap" in interstellar-pallets/pallets/tx-validation/src/lib.rs
         /// 32 b/c IPFS hash is 256 bits = 32 bytes
         /// But due to encoding(??) in practice it is 46 bytes(checked with debugger), and we take some margin
-        message_pgarbled_cid: BoundedVec<u8, ConstU32<64>>,
+        pub(crate) message_pgarbled_cid: BoundedVec<u8, ConstU32<64>>,
         /// SHOULD (roughly) match the Event emitted by "fn check_input" in interstellar-pallets/pallets/tx-validation/src/lib.rs
-        result: TxResult,
+        pub(crate) result: TxResult,
     }
 
     /// Store account_id -> list(ipfs_cids);
@@ -53,7 +53,7 @@ pub mod pallet {
 
     /// Store account -> List of tx results;
     #[pallet::storage]
-    #[pallet::getter(fn circuit_server_metadata_map)]
+    #[pallet::getter(fn tx_results_map)]
     pub(super) type TxResultsMap<T: Config> =
         StorageMap<_, Twox128, T::AccountId, BoundedVec<TxResultPackage, ConstU32<16>>>;
 
@@ -82,7 +82,7 @@ pub mod pallet {
 
     /// for now we reference the whole "DisplayStrippedCircuitsPackage" by just using the message_pgarbled_cid
     /// so we only pass "message_pgarbled_cid"
-    /// It SHOULD always match what "fn check_input" is using as key!
+    /// It SHOULD always match what "fn check_input"(pallet-tx-validation) is using as key!
     pub fn store_tx_result<T: Config>(
         who: &T::AccountId,
         message_pgarbled_cid: Vec<u8>,
@@ -111,7 +111,10 @@ pub mod pallet {
             .unwrap();
         <TxResultsMap<T>>::insert(who, current_tx_history);
 
-        log::info!("[tx-registry] store_tx_result: done!");
+        log::info!(
+            "[tx-registry] store_tx_result: done! [{:?}]",
+            <TxResultsMap<T>>::try_get(&who).unwrap_or_default()
+        );
 
         Ok(())
     }
@@ -121,10 +124,10 @@ pub mod pallet {
     // Dispatchable functions must be annotated with a weight and must return a DispatchResult.
     #[pallet::call]
     impl<T: Config> Pallet<T> {
-        // TODO remove call? how to properly handle calling store_metadata_aux from pallet-ocw-garble???
-        // NOTE: this is needed only for tests...
+        /// TEST ONLY
+        /// In prod the pallet is called directly via its public interface
         #[pallet::weight(10_000 + T::DbWeight::get().writes(1))]
-        pub fn store_metadata(
+        pub fn store_tx_result(
             origin: OriginFor<T>,
             message_pgarbled_cid: Vec<u8>,
             result: TxResult,

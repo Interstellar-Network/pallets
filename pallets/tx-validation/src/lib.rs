@@ -22,7 +22,7 @@ pub mod pallet {
 
     /// Configure the pallet by specifying the parameters and types on which it depends.
     #[pallet::config]
-    pub trait Config: frame_system::Config + 'static {
+    pub trait Config: frame_system::Config + pallet_tx_registry::Config + 'static {
         /// Because this pallet emits events, it depends on the runtime's definition of an event.
         type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
     }
@@ -251,7 +251,7 @@ pub mod pallet {
             // Compare with storage
             let display_validation_package = <CircuitServerMetadataMap<T>>::get(
                 who.clone(),
-                TryInto::<BoundedVec<u8, ConstU32<64>>>::try_into(ipfs_cid).unwrap(),
+                TryInto::<BoundedVec<u8, ConstU32<64>>>::try_into(ipfs_cid.clone()).unwrap(),
             )
             .ok_or(Error::<T>::CircuitNotFound)?;
 
@@ -299,12 +299,26 @@ pub mod pallet {
             // TODO remove the key from the map; we DO NOT want to allow retrying
             if display_validation_package.message_digits == computed_inputs_from_permutation {
                 log::info!("[tx-validation] TxPass",);
-                Self::deposit_event(Event::TxPass { account_id: who });
+                Self::deposit_event(Event::TxPass {
+                    account_id: who.clone(),
+                });
                 // TODO on success: call next step/callback (ie pallet-tx-XXX)
+                pallet_tx_registry::store_tx_result::<T>(
+                    &who,
+                    ipfs_cid,
+                    pallet_tx_registry::TxResult::TxPass,
+                );
                 return Ok(());
             } else {
                 log::info!("[tx-validation] TxFail",);
-                Self::deposit_event(Event::TxFail { account_id: who });
+                Self::deposit_event(Event::TxFail {
+                    account_id: who.clone(),
+                });
+                pallet_tx_registry::store_tx_result::<T>(
+                    &who,
+                    ipfs_cid,
+                    pallet_tx_registry::TxResult::TxFail,
+                );
                 return Err(Error::<T>::TxWrongCodeGiven)?;
             }
         }

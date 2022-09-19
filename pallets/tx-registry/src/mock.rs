@@ -50,7 +50,7 @@ impl system::Config for Test {
 }
 
 impl pallet_tx_registry::Config for Test {
-    type Event = Event;
+    // type Event = Event;
 }
 
 // Build genesis storage according to the mock runtime.

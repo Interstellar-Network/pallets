@@ -1,10 +1,9 @@
-use crate::{mock::*, Error};
+use crate::mock::*;
 use frame_support::assert_ok;
-use frame_support::pallet_prelude::ConstU32;
-use frame_support::{assert_err, BoundedVec};
+use test_log::test;
 
 #[test]
-fn store_metadata_ok() {
+fn store_tx_result_txpass_ok() {
     new_test_ext().execute_with(|| {
         // Dispatch a signed extrinsic.
         let account_id = 1;
@@ -12,18 +11,64 @@ fn store_metadata_ok() {
         assert_ok!(TxRegistry::store_tx_result(
             Origin::signed(account_id),
             ipfs_cid.clone(),
-            result,
+            crate::TxResult::TxPass,
         ));
-        // Read pallet storage and assert an expected result.
-        // MUST match the value [1,2] given to store_metadata
-        let key_ipfs_hash: BoundedVec<u8, ConstU32<64>> = ipfs_cid.clone().try_into().unwrap();
-        // MUST match the value [3,4] given to store_metadata
-        let expected_message_digits: BoundedVec<u8, ConstU32<10>> =
-            message_digits.clone().try_into().unwrap();
-        let expected_pinpad_digits: BoundedVec<u8, ConstU32<10>> =
-            pinpad_digits.clone().try_into().unwrap();
-        let stored = TxRegistry::circuit_server_metadata_map(account_id, key_ipfs_hash).unwrap();
-        assert_eq!(stored.message_digits, expected_message_digits);
-        assert_eq!(stored.pinpad_digits, expected_pinpad_digits);
+
+        let stored = TxRegistry::tx_results_map(account_id).unwrap();
+        let first = stored.first().unwrap();
+
+        assert_eq!(first.message_pgarbled_cid, ipfs_cid);
+        assert_eq!(first.result, crate::TxResult::TxPass,);
+    });
+}
+
+#[test]
+fn store_tx_result_txfail_ok() {
+    new_test_ext().execute_with(|| {
+        // Dispatch a signed extrinsic.
+        let account_id = 1;
+        let ipfs_cid = vec![1, 2];
+        assert_ok!(TxRegistry::store_tx_result(
+            Origin::signed(account_id),
+            ipfs_cid.clone(),
+            crate::TxResult::TxFail,
+        ));
+
+        let stored = TxRegistry::tx_results_map(account_id).unwrap();
+        let first = stored.first().unwrap();
+
+        assert_eq!(first.message_pgarbled_cid, ipfs_cid);
+        assert_eq!(first.result, crate::TxResult::TxFail,);
+    });
+}
+
+/// Test that pushing 2 tx results works fine
+#[test]
+fn store_tx_result_multiple_ok() {
+    new_test_ext().execute_with(|| {
+        // Dispatch a signed extrinsic.
+        let account_id = 1;
+        let ipfs_cid_1 = vec![1, 2];
+        assert_ok!(TxRegistry::store_tx_result(
+            Origin::signed(account_id),
+            ipfs_cid_1.clone(),
+            crate::TxResult::TxPass,
+        ));
+
+        let ipfs_cid_2 = vec![3, 4];
+        assert_ok!(TxRegistry::store_tx_result(
+            Origin::signed(account_id),
+            ipfs_cid_2.clone(),
+            crate::TxResult::TxFail,
+        ));
+
+        let stored = TxRegistry::tx_results_map(account_id).unwrap();
+        let first = stored.get(0).unwrap();
+        let second = stored.get(1).unwrap();
+
+        assert_eq!(first.message_pgarbled_cid, ipfs_cid_1);
+        assert_eq!(first.result, crate::TxResult::TxPass,);
+        assert_eq!(second.message_pgarbled_cid, ipfs_cid_2);
+        assert_eq!(second.result, crate::TxResult::TxFail,);
     });
 }
