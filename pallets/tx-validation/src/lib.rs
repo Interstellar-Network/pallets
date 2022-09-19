@@ -150,6 +150,7 @@ pub mod pallet {
     }
 
     // Errors inform users that something went wrong.
+    #[derive(Clone)]
     #[pallet::error]
     pub enum Error<T> {
         // The given ipfs_cid was NOT present in CircuitServerMetadataMap
@@ -157,6 +158,7 @@ pub mod pallet {
         // wrong OTP/permutation given -> Transaction failed
         TxWrongCodeGiven,
         // inputs SHOULD be [0;9] or ['0';'9']
+        // and inputs length MUST match expected length
         TxInvalidInputsGiven,
         /// Errors should have helpful documentation associated with them.
         StorageOverflow,
@@ -278,15 +280,16 @@ pub mod pallet {
             // eg user inputs:          [0,1]
             // eg pinpad_permutation:   [9,8,7,0,1,...]
             // true inputs -->          [9,8]
-            let computed_inputs_from_permutation: Vec<u8> = input_digits_int
+            let computed_inputs_from_permutation: Result<Vec<u8>, Error<T>> = input_digits_int
                 .into_iter()
                 .map(|pinpad_index| {
                     pinpad_permutation
                         .get(pinpad_index as usize)
-                        .unwrap()
-                        .clone()
+                        .ok_or(Error::<T>::TxInvalidInputsGiven)
+                        .and_then(|idx| Ok(idx.clone()))
                 })
                 .collect();
+            let computed_inputs_from_permutation = computed_inputs_from_permutation?;
             log::info!(
                 "[tx-validation] check_input: computed_inputs_from_permutation = {:?}, message_digits = {:?}",
                 &computed_inputs_from_permutation,

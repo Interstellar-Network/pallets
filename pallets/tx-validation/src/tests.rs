@@ -2,6 +2,7 @@ use crate::{mock::*, Error};
 use frame_support::assert_ok;
 use frame_support::pallet_prelude::ConstU32;
 use frame_support::{assert_err, BoundedVec};
+use test_log::test;
 
 #[test]
 fn store_metadata_ok() {
@@ -65,7 +66,7 @@ fn check_input_good_u8_ok() {
 }
 
 #[test]
-fn check_input_bad_error() {
+fn check_input_wrong_code_tx_fail() {
     new_test_ext().execute_with(|| {
         let account_id = 1;
         let ipfs_cid = vec![1, 2];
@@ -86,6 +87,70 @@ fn check_input_bad_error() {
         );
         System::assert_last_event(crate::Event::TxFail { account_id: 1 }.into());
         assert_err!(result, Error::<Test>::TxWrongCodeGiven);
+        // TODO? should this be a noop?
+        // assert_noop!(
+        //     TxValidation::check_input(Origin::signed(account_id), ipfs_cid.clone(), vec![0, 0]),
+        //     Error::<Test>::TxWrongInputGiven
+        // );
+    });
+}
+
+/// When expecting 2 digits, giving eg 4 inputs SHOULD graciously fail
+/// It MUST fail with the standard "tx fail" error(ie TxWrongInputGiven) to avoid leaking the expected input length
+/// NOTE: the expected input length is indeed present on the client side, but it is NOT leaked from this pallet.
+/// It comes from pallet_ocw_garble.
+#[test]
+fn check_input_too_long_fail_graciously() {
+    new_test_ext().execute_with(|| {
+        let account_id = 1;
+        let ipfs_cid = vec![1, 2];
+        assert_ok!(TxValidation::store_metadata(
+            Origin::signed(account_id),
+            ipfs_cid.clone(),
+            // store_metadata is raw, as-is(no ascii conv)
+            vec![3, 4],
+            vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+        ));
+
+        // Dispatch a signed extrinsic.
+        // Ensure the expected error is thrown if a wrong input is given
+        let result = TxValidation::check_input(
+            Origin::signed(account_id),
+            ipfs_cid.clone(),
+            vec![0, 0, 0, 0],
+        );
+        System::assert_last_event(crate::Event::TxFail { account_id: 1 }.into());
+        assert_err!(result, Error::<Test>::TxWrongCodeGiven);
+        // TODO? should this be a noop?
+        // assert_noop!(
+        //     TxValidation::check_input(Origin::signed(account_id), ipfs_cid.clone(), vec![0, 0]),
+        //     Error::<Test>::TxWrongInputGiven
+        // );
+    });
+}
+
+/// Giving inputs outside '0'-'9' or 0-9 SHOULD fail graciously(ie no panic!)
+#[test]
+fn check_input_invalid_fail_graciously() {
+    new_test_ext().execute_with(|| {
+        let account_id = 1;
+        let ipfs_cid = vec![1, 2];
+        assert_ok!(TxValidation::store_metadata(
+            Origin::signed(account_id),
+            ipfs_cid.clone(),
+            // store_metadata is raw, as-is(no ascii conv)
+            vec![3, 4],
+            vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+        ));
+
+        // Dispatch a signed extrinsic.
+        // Ensure the expected error is thrown if a wrong input is given
+        let result = TxValidation::check_input(
+            Origin::signed(account_id),
+            ipfs_cid.clone(),
+            vec!['^' as u8],
+        );
+        assert_err!(result, Error::<Test>::TxInvalidInputsGiven);
         // TODO? should this be a noop?
         // assert_noop!(
         //     TxValidation::check_input(Origin::signed(account_id), ipfs_cid.clone(), vec![0, 0]),
