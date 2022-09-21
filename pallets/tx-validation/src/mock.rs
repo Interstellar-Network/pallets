@@ -19,7 +19,6 @@ frame_support::construct_runtime!(
     {
         System: frame_system::{Pallet, Call, Config, Storage, Event<T>},
         TxValidation: pallet_tx_validation,
-        TxRegistry: pallet_tx_registry,
     }
 );
 
@@ -53,8 +52,6 @@ impl system::Config for Test {
 impl pallet_tx_validation::Config for Test {
     type Event = Event;
 }
-
-impl pallet_tx_registry::Config for Test {}
 
 // Build genesis storage according to the mock runtime.
 pub fn new_test_ext() -> sp_io::TestExternalities {

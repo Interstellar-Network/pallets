@@ -83,7 +83,7 @@ pub mod pallet {
     /// for now we reference the whole "DisplayStrippedCircuitsPackage" by just using the message_pgarbled_cid
     /// so we only pass "message_pgarbled_cid"
     /// It SHOULD always match what "fn check_input"(pallet-tx-validation) is using as key!
-    pub fn store_tx_result<T: Config>(
+    fn store_tx_result<T: Config>(
         who: &T::AccountId,
         message_pgarbled_cid: Vec<u8>,
         result: TxResult,
@@ -124,8 +124,9 @@ pub mod pallet {
     // Dispatchable functions must be annotated with a weight and must return a DispatchResult.
     #[pallet::call]
     impl<T: Config> Pallet<T> {
-        /// TEST ONLY
-        /// In prod the pallet is called directly via its public interface
+        /// IMPORTANT: directly calling "fn store_tx_result"(not the Call) or directly modifying the Storage
+        /// from the `integritee-worker` DOES NOT work.
+        /// To be able to sync from sidechain/enclave -> parentchain, it MUST go through a Call
         #[pallet::weight(10_000 + T::DbWeight::get().writes(1))]
         pub fn store_tx_result(
             origin: OriginFor<T>,
