@@ -251,7 +251,7 @@ pub mod pallet {
             // Compare with storage
             let display_validation_package = <CircuitServerMetadataMap<T>>::get(
                 who.clone(),
-                TryInto::<BoundedVec<u8, ConstU32<64>>>::try_into(ipfs_cid.clone()).unwrap(),
+                TryInto::<BoundedVec<u8, ConstU32<64>>>::try_into(ipfs_cid).unwrap(),
             )
             .ok_or(Error::<T>::CircuitNotFound)?;
 
@@ -286,7 +286,7 @@ pub mod pallet {
                     pinpad_permutation
                         .get(pinpad_index as usize)
                         .ok_or(Error::<T>::TxInvalidInputsGiven)
-                        .and_then(|idx| Ok(idx.clone()))
+                        .map(|idx| *idx)
                 })
                 .collect();
             let computed_inputs_from_permutation = computed_inputs_from_permutation?;
@@ -299,17 +299,13 @@ pub mod pallet {
             // TODO remove the key from the map; we DO NOT want to allow retrying
             if display_validation_package.message_digits == computed_inputs_from_permutation {
                 log::info!("[tx-validation] TxPass",);
-                Self::deposit_event(Event::TxPass {
-                    account_id: who.clone(),
-                });
+                Self::deposit_event(Event::TxPass { account_id: who });
                 // TODO on success: call next step/callback (ie pallet-tx-XXX)
-                return Ok(());
+                Ok(())
             } else {
                 log::info!("[tx-validation] TxFail",);
-                Self::deposit_event(Event::TxFail {
-                    account_id: who.clone(),
-                });
-                return Err(Error::<T>::TxWrongCodeGiven)?;
+                Self::deposit_event(Event::TxFail { account_id: who });
+                Err(Error::<T>::TxWrongCodeGiven.into())
             }
         }
     }

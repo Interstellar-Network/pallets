@@ -41,12 +41,6 @@ pub mod pallet {
     /// The keys can be inserted manually via RPC (see `author_insertKey`).
     pub const KEY_TYPE: KeyTypeId = KeyTypeId(*b"garb");
 
-    const LOCK_TIMEOUT_EXPIRATION: u64 = 10000; // in milli-seconds
-    const LOCK_BLOCK_EXPIRATION: u32 = 3; // in block number
-
-    const ONCHAIN_TX_KEY: &[u8] = b"ocw-garble::storage::tx";
-    const LOCK_KEY: &[u8] = b"ocw-garble::lock";
-    const API_ENDPOINT_GARBLE_URL: &str = "/interstellarpbapigarble.GarbleApi/GarbleIpfs";
     const API_ENDPOINT_GARBLE_STRIP_URL: &str =
         "/interstellarpbapigarble.GarbleApi/GarbleAndStripIpfs";
 
@@ -259,14 +253,6 @@ pub mod pallet {
     }
 
     impl<T: Config> Pallet<T> {
-        fn get_and_increment_nonce() -> Vec<u8> {
-            let nonce = <Nonce<T>>::get();
-            <Nonce<T>>::put(nonce.wrapping_add(1));
-            nonce.encode()
-        }
-    }
-
-    impl<T: Config> Pallet<T> {
         /// Get the Storage using an RPC
         /// Needed b/c Storage access from a worker is not yet functional: https://github.com/integritee-network/worker/issues/976
         /// [FAIL cf core/rpc-client/src/direct_client.rs and cli/src/trusted_operation.rs
@@ -366,7 +352,7 @@ pub mod pallet {
                 &who,
                 message_pgarbled_cid.clone(),
                 message_digits.clone(),
-                pinpad_digits.clone(),
+                pinpad_digits,
             )
             .expect("store_metadata_aux failed!");
 
@@ -437,7 +423,7 @@ pub mod pallet {
             origin: OriginFor<T>,
             tx_msg: Vec<u8>,
         ) -> DispatchResult {
-            let who = ensure_signed(origin.clone())?;
+            let who = ensure_signed(origin)?;
             log::info!(
                 "[ocw-garble] garble_and_strip_display_circuits_package_signed: ({:?} for {:?})",
                 sp_std::str::from_utf8(&tx_msg).expect("tx_msg utf8"),
@@ -533,7 +519,6 @@ pub mod pallet {
                         pinpad_reply,
                         pinpad_digits,
                     ) => (message_reply, message_digits, pinpad_reply, pinpad_digits),
-                    _ => panic!("match result_grpc_call failed!"),
                 };
 
             // TODO TOREMOVE
@@ -547,7 +532,7 @@ pub mod pallet {
                 pinpad_reply.pgarbled_cid.bytes().collect(),
                 pinpad_reply.packmsg_cid.bytes().collect(),
                 pinpad_digits.to_vec(),
-            );
+            )?;
 
             Ok(())
         }
@@ -573,22 +558,6 @@ pub mod pallet {
         }
     }
 
-    impl<T: Config> Pallet<T> {
-        fn derived_key() -> Vec<u8> {
-            // TODO re-add block_number?
-            let block_number = T::BlockNumber::default();
-            block_number.using_encoded(|encoded_bn| {
-                ONCHAIN_TX_KEY
-                    .clone()
-                    .into_iter()
-                    .chain(b"/".into_iter())
-                    .chain(encoded_bn)
-                    .copied()
-                    .collect::<Vec<u8>>()
-            })
-        }
-    }
-
     #[derive(Debug, Deserialize, Encode, Decode)]
     enum GrpcCallKind {
         GarbleStandard,
@@ -597,7 +566,6 @@ pub mod pallet {
 
     // reply type for each GrpcCallKind
     enum GrpcCallReplyKind {
-        GarbleStandard(crate::interstellarpbapigarble::GarbleIpfsReply),
         /// two reply b/c we call the same endpoint twice: one for message, then one for pinpad
         /// param Vec<u8> = "digits"; generated randomly in "garble_and_strip_display_circuits_package_signed"
         ///   and passed all the way around
@@ -630,144 +598,6 @@ pub mod pallet {
     }
 
     impl<T: Config> Pallet<T> {
-        /// Append a new number to the tail of the list, removing an element from the head if reaching
-        ///   the bounded length.
-        // TODO TOREMOVE: "fn offchain_worker" is NOT used in TEE
-        // fn append_or_replace_skcd_hash(
-        //     grpc_kind: GrpcCallKind,
-        //     // optional: only if GrpcCallKind::GarbleStandard
-        //     skcd_cid: Option<Vec<u8>>,
-        //     // optional: only if GrpcCallKind::GarbleAndStrip
-        //     message_skcd_ipfs_cid: Option<Vec<u8>>,
-        //     pinpad_skcd_ipfs_cid: Option<Vec<u8>>,
-        //     tx_msg: Option<Vec<u8>>,
-        //     message_digits: Option<Vec<u8>>,
-        //     pinpad_digits: Option<Vec<u8>>,
-        // ) {
-        //     let key = Self::derived_key();
-        //     let data = IndexingData {
-        //         block_number: 1,
-        //         grpc_kind: grpc_kind,
-        //         // optional: only if GrpcCallKind::GarbleStandard
-        //         skcd_ipfs_cid: skcd_cid,
-        //         // optional: only if GrpcCallKind::GarbleAndStrip
-        //         message_skcd_ipfs_cid: message_skcd_ipfs_cid,
-        //         pinpad_skcd_ipfs_cid: pinpad_skcd_ipfs_cid,
-        //         tx_msg: tx_msg,
-        //         message_digits: message_digits,
-        //         pinpad_digits: pinpad_digits,
-        //     };
-        //     sp_io::offchain_index::set(&key, &data.encode());
-        // }
-
-        /// Check if we have fetched the data before. If yes, we can use the cached version
-        ///   stored in off-chain worker storage `storage`. If not, we fetch the remote info and
-        ///   write the info into the storage for future retrieval.
-        //
-        // TODO TOREMOVE: "fn offchain_worker" is NOT used in TEE
-        // fn process_if_needed(_block_number: T::BlockNumber) -> Result<(), Error<T>> {
-        //     // Reading back the off-chain indexing value. It is exactly the same as reading from
-        //     // ocw local storage.
-        //     //
-        //     // IMPORTANT: writing using eg StorageValue(mutate,set,kill,take) works but DOES NOTHING
-        //     // During the next call, the old value is there!
-        //     // So we MUST use StorageValueRef/LocalStorage to write.
-        //     let key = Self::derived_key();
-        //     let oci_mem = StorageValueRef::persistent(&key);
-
-        //     let indexing_data = oci_mem
-        //         .get::<IndexingData>()
-        //         .unwrap_or(Some(IndexingData::default()))
-        //         .unwrap_or(IndexingData::default());
-
-        //     let to_process_block_number = indexing_data.block_number;
-
-        //     // TODO proper job queue; or at least proper CHECK
-        //     if to_process_block_number == 0 {
-        //         log::info!("[ocw-garble] nothing to do, returning...");
-        //         return Ok(());
-        //     }
-
-        //     // Since off-chain storage can be accessed by off-chain workers from multiple runs, it is important to lock
-        //     //   it before doing heavy computations or write operations.
-        //     //
-        //     // There are four ways of defining a lock:
-        //     //   1) `new` - lock with default time and block exipration
-        //     //   2) `with_deadline` - lock with default block but custom time expiration
-        //     //   3) `with_block_deadline` - lock with default time but custom block expiration
-        //     //   4) `with_block_and_time_deadline` - lock with custom time and block expiration
-        //     // Here we choose the most custom one for demonstration purpose.
-        //     let mut lock = StorageLock::<BlockAndTime<Self>>::with_block_and_time_deadline(
-        //         LOCK_KEY,
-        //         LOCK_BLOCK_EXPIRATION,
-        //         Duration::from_millis(LOCK_TIMEOUT_EXPIRATION),
-        //     );
-
-        //     // We try to acquire the lock here. If failed, we know the `fetch_n_parse` part inside is being
-        //     //   executed by previous run of ocw, so the function just returns.
-        //     if let Ok(_guard) = lock.try_lock() {
-        //         // NOTE: remove the task from the "job queue" wether it worked or not
-        //         // TODO better? But in this case we should only retry in case of "remote error"
-        //         // and NOT retry if eg the given hash is not a valid IPFS hash
-        //         //
-        //         // DO NOT use "sp_io::offchain_index::set"!
-        //         // We MUST use "StorageValueRef::persistent" else the value is not updated??
-        //         oci_mem.set(&IndexingData::default());
-
-        //         let result_grpc_call = match indexing_data.grpc_kind {
-        //             GrpcCallKind::GarbleStandard => Self::call_grpc_garble(
-        //                 indexing_data.skcd_ipfs_cid.expect("missing skcd_ipfs_cid"),
-        //             ),
-        //             GrpcCallKind::GarbleAndStrip => Self::call_grpc_garble_and_strip(
-        //                 indexing_data
-        //                     .message_skcd_ipfs_cid
-        //                     .expect("missing message_skcd_ipfs_cid"),
-        //                 indexing_data
-        //                     .pinpad_skcd_ipfs_cid
-        //                     .expect("missing pinpad_skcd_ipfs_cid"),
-        //                 indexing_data.tx_msg.expect("missing tx_msg"),
-        //                 indexing_data
-        //                     .message_digits
-        //                     .expect("missing message_digits"),
-        //                 indexing_data.pinpad_digits.expect("missing pinpad_digits"),
-        //             ),
-        //         };
-
-        //         // TODO TOREMOVE
-        //         // Self::finalize_grpc_call(result_grpc_call)
-        //     }
-        //     Ok(())
-        // }
-
-        /// Call the GRPC endpoint API_ENDPOINT_GARBLE_URL, encoding the request as grpc-web, and decoding the response
-        ///
-        /// return: a IPFS hash
-        fn call_grpc_garble(skcd_cid: Vec<u8>) -> Result<GrpcCallReplyKind, Error<T>> {
-            let skcd_cid_str = sp_std::str::from_utf8(&skcd_cid)
-                .expect("call_grpc_garble from_utf8")
-                .to_owned();
-            let input = crate::interstellarpbapigarble::GarbleIpfsRequest {
-                skcd_cid: skcd_cid_str,
-            };
-            let body_bytes = ocw_common::encode_body_grpc_web(input);
-
-            let endpoint = get_full_uri(API_ENDPOINT_GARBLE_URL);
-
-            let (resp_bytes, resp_content_type) = ocw_common::fetch_from_remote_grpc_web(
-                body_bytes,
-                &endpoint,
-                ocw_common::ContentType::GrpcWeb,
-            )
-            .map_err(|e| {
-                log::error!("[ocw-garble] call_grpc_garble error: {:?}", e);
-                <Error<T>>::HttpFetchingError
-            })?;
-
-            let resp: crate::interstellarpbapigarble::GarbleIpfsReply =
-                ocw_common::decode_body_grpc_web(resp_bytes, resp_content_type);
-            Ok(GrpcCallReplyKind::GarbleStandard(resp))
-        }
-
         /// Regroup the 2 calls to API_ENDPOINT_GARBLE_STRIP_URL in one
         fn call_grpc_garble_and_strip(
             message_skcd_ipfs_cid: Vec<u8>,
@@ -793,7 +623,7 @@ pub mod pallet {
                     skcd_cid: skcd_cid_str,
                     tx_msg: tx_msg_str,
                     server_metadata: Some(crate::interstellarpbapigarble::CircuitServerMetadata {
-                        digits: digits.clone().into(),
+                        digits,
                     }),
                 };
                 let body_bytes = ocw_common::encode_body_grpc_web(input);
@@ -925,9 +755,7 @@ pub mod pallet {
     /// Like get_full_uri, but return the node URI(ie the address of `integritee-node` RPC)
     #[cfg(all(not(feature = "sgx"), feature = "std"))]
     fn get_node_uri() -> String {
-        let uri_root = std::env::var("INTERSTELLAR_URI_NODE").unwrap();
-
-        format!("{}", uri_root)
+        std::env::var("INTERSTELLAR_URI_NODE").unwrap()
     }
     #[cfg(all(not(feature = "std"), feature = "sgx"))]
     fn get_node_uri() -> sgx_tstd::string::String {

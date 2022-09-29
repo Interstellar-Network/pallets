@@ -29,7 +29,7 @@ pub mod pallet {
 
     /// the maximum accepted length for "register_mobile"
     /// WARNING: MUST be big enough to include encoded version(ie PKCS etc)
-    type MAX_PUB_KEY_LEN = ConstU32<256>;
+    type MaxPubKeyLen = ConstU32<256>;
 
     /// Easy way to make a link b/w a "message" and "pinpad" circuits
     #[derive(
@@ -44,7 +44,7 @@ pub mod pallet {
         MaxEncodedLen,
     )]
     pub struct MobilePackage {
-        pub pub_key: BoundedVec<u8, MAX_PUB_KEY_LEN>,
+        pub pub_key: BoundedVec<u8, MaxPubKeyLen>,
     }
 
     #[pallet::storage]
@@ -81,7 +81,7 @@ pub mod pallet {
 
     impl<T: Config> Pallet<T> {
         /// Check the pub_key is at least 32 bytes in length
-        pub fn ensure_pub_key_valid(pub_key: &Vec<u8>) -> Result<(), Error<T>> {
+        pub fn ensure_pub_key_valid(pub_key: &[u8]) -> Result<(), Error<T>> {
             match pub_key.len() {
                 32.. => Ok(()),
                 _ => Err(Error::<T>::InvalidKeySize),
@@ -111,7 +111,7 @@ pub mod pallet {
             <MobileRegistryMap<T>>::insert(
                 who,
                 MobilePackage {
-                    pub_key: TryInto::<BoundedVec<u8, MAX_PUB_KEY_LEN>>::try_into(pub_key).unwrap(),
+                    pub_key: TryInto::<BoundedVec<u8, MaxPubKeyLen>>::try_into(pub_key).unwrap(),
                 },
             );
 

@@ -1,5 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
+// https://github.com/neoeinstein/protoc-gen-prost/issues/26
+#[allow(clippy::derive_partial_eq_without_eq)]
 mod interstellarpbapicircuits {
     // include_bytes!(concat!(env!("OUT_DIR")), "/interstellarpbapicircuits.rs");
     // include_bytes!(concat!(env!("OUT_DIR"), "/interstellarpbapicircuits.rs"));
@@ -287,7 +289,7 @@ pub mod pallet {
             pinpad_skcd_cid: Vec<u8>,
             pinpad_nb_digits: u32,
         ) -> DispatchResult {
-            let who = ensure_signed(origin.clone())?;
+            let who = ensure_signed(origin)?;
             log::info!(
                 "[ocw-circuits] callback_new_display_circuits_package_signed: ({:?},{:?}),({:?},{:?}) for {:?}",
                 sp_std::str::from_utf8(&message_skcd_cid).expect("message_skcd_cid utf8"),
@@ -324,9 +326,8 @@ pub mod pallet {
             let block_number = T::BlockNumber::default();
             block_number.using_encoded(|encoded_bn| {
                 ONCHAIN_TX_KEY
-                    .clone()
-                    .into_iter()
-                    .chain(b"/".into_iter())
+                    .iter()
+                    .chain(b"/".iter())
                     .chain(encoded_bn)
                     .copied()
                     .collect::<Vec<u8>>()
@@ -374,7 +375,7 @@ pub mod pallet {
             let data = IndexingData {
                 verilog_ipfs_hash: verilog_cid,
                 block_number: 1,
-                grpc_kind: grpc_kind,
+                grpc_kind,
             };
             sp_io::offchain_index::set(&key, &data.encode());
         }
@@ -397,8 +398,8 @@ pub mod pallet {
 
             let indexing_data = oci_mem
                 .get::<IndexingData>()
-                .unwrap_or(Some(IndexingData::default()))
-                .unwrap_or(IndexingData::default());
+                .unwrap_or_else(|_| Some(IndexingData::default()))
+                .unwrap_or_default();
 
             let to_process_verilog_cid = indexing_data.verilog_ipfs_hash;
             let to_process_block_number = indexing_data.block_number;
@@ -450,8 +451,8 @@ pub mod pallet {
         /// Call the GRPC endpoint API_ENDPOINT_GENERIC_URL, encoding the request as grpc-web, and decoding the response
         ///
         /// return: a IPFS hash
-        fn call_grpc_generic(verilog_cid: &Vec<u8>) -> Result<GrpcCallReplyKind, Error<T>> {
-            let verilog_cid_str = sp_std::str::from_utf8(&verilog_cid)
+        fn call_grpc_generic(verilog_cid: &[u8]) -> Result<GrpcCallReplyKind, Error<T>> {
+            let verilog_cid_str = sp_std::str::from_utf8(verilog_cid)
                 .expect("call_grpc_generic from_utf8")
                 .to_owned();
             let input = crate::interstellarpbapicircuits::SkcdGenericFromIpfsRequest {
@@ -531,7 +532,7 @@ pub mod pallet {
                     crate::interstellarpbapicircuits::SkcdDisplayRequest {
                         width: DEFAULT_PINPAD_WIDTH,
                         height: DEFAULT_PINPAD_HEIGHT,
-                        digits_bboxes: digits_bboxes,
+                        digits_bboxes,
                     }
                 };
 

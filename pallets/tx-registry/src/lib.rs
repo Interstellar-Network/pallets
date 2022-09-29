@@ -106,7 +106,7 @@ pub mod pallet {
                     message_pgarbled_cid,
                 )
                 .unwrap(),
-                result: result,
+                result,
             })
             .unwrap();
         <TxResultsMap<T>>::insert(who, current_tx_history);
