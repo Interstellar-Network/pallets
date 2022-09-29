@@ -55,7 +55,7 @@ pub mod pallet {
     #[pallet::storage]
     #[pallet::getter(fn tx_results_map)]
     pub(super) type TxResultsMap<T: Config> =
-        StorageMap<_, Twox128, T::AccountId, BoundedVec<TxResultPackage, ConstU32<16>>>;
+        StorageMap<_, Blake2_128, T::AccountId, BoundedVec<TxResultPackage, ConstU32<16>>>;
 
     #[pallet::pallet]
     #[pallet::generate_store(pub(super) trait Store)]
