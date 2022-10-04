@@ -14,16 +14,16 @@ categories = [
 	"offchain worker",
 ]
 scale-info = { default-features = false, features = ['derive'], version = '1.0' }
-serde = { version = '1.0.130', default-features = false, features = ['derive'] }
-serde_json = { version = '1.0.67', default-features = false, features = ['alloc'] }
+serde = { version = '1.0', default-features = false, features = ['derive'] }
+serde_json = { version = '1.0', default-features = false, features = ['alloc'] }
 
 [package.metadata.docs.rs]
 targets = ['x86_64-unknown-linux-gnu']
 
 [dependencies]
 log = { version = "0.4", default-features = false }
-serde = { version = '1.0.130', default-features = false, features = ['derive'] }
-serde_json = { version = '1.0.67', default-features = false, features = ['alloc'] }
+serde = { version = '1.0', default-features = false, features = ['derive'] }
+serde_json = { version = '1.0', default-features = false, features = ['alloc'] }
 rand_chacha = { version = "0.3.1", default-features = false }
 rand = { version = "0.8.5", default-features = false }
 
@@ -34,7 +34,9 @@ prost-types = { version = "0.11", default-features = false }
 
 ocw-common = { path = "../../ocw-common", default-features = false }
 pallet-tx-validation = { path = "../tx-validation", default-features = false }
-pallet-ocw-circuits = { path = "../ocw-circuits", default-features = false }
+# pallet-ocw-circuits = { path = "../ocw-circuits", default-features = false }
+# TODO TOREMOVE
+pallet-timestamp = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.27"}
 
 # prost: could not find a way to use encode() in no_std context...
 # = note: the lang item is first defined in crate `std` (which `byteorder` depends on)
@@ -42,19 +44,29 @@ pallet-ocw-circuits = { path = "../ocw-circuits", default-features = false }
 # quick-protobuf = { version = "0.8.0", default-features = false }
 # quick-protobuf = "0.8.0"
 
-codec = { package = "parity-scale-codec", version = "3.0.0", default-features = false, features = [
+codec = { package = "parity-scale-codec", version = "^3.1", default-features = false, features = [
 	"derive",
 ] }
 scale-info = { version = "2.0.1", default-features = false, features = ["derive"] }
-frame-support = { default-features = false, version = "4.0.0-dev", git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.26"}
-frame-system = { default-features = false, version = "4.0.0-dev", git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.26" }
-frame-benchmarking = { default-features = false, version = "4.0.0-dev", git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.26", optional = true }
+frame-support = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.27"}
+frame-system = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.27" }
+frame-benchmarking = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.27", optional = true }
 
-sp-core = { default-features = false, version = "6.0.0", git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.26" }
-sp-io = { default-features = false, version = "6.0.0", git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.26" }
-sp-runtime = { version = "6.0.0", default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.26" }
-sp-keystore = { default-features = false, version = "0.12.0", git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.26", optional = true }
-sp-std = { default-features = false, version = "4.0.0", git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.26" }
+sp-core = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.27" }
+sp-io = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.27" }
+sp-runtime = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.27" }
+sp-keystore = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.27", optional = true }
+sp-std = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.27" }
+
+sgx_tstd = { branch = "master", git = "https://github.com/apache/teaclave-sgx-sdk.git", optional = true }
+
+# TEMP; only needed for "get_timestamp_rpc"
+# itp-rpc = { path = "../../../core-primitives/rpc", default-features = false }
+# itc-rpc-client = { path = "../../../core/rpc-client" }
+# itp-types = { default-features = false, git = "https://github.com/integritee-network/pallets.git", branch = "master" }
+# itp-utils = { default-features = false, git = "https://github.com/integritee-network/pallets.git", branch = "master" }
+#
+# substrate-api-client = { git = "https://github.com/scs/substrate-api-client", branch = "polkadot-v0.9.27" }
 
 [features]
 default = ["std"]
@@ -73,10 +85,25 @@ std = [
 	"rand_chacha/std",
 	# custom
 	"pallet-tx-validation/std",
-	"pallet-ocw-circuits/std",
+	# TODO? "pallet-ocw-circuits/std",
+	"ocw-common/std",
+	# TEMP
+	# "itp-types/std",
+    # "itp-utils/std",
+	# "itp-rpc/std",
+	# "substrate-api-client/std",
+]
+sgx = [
+    "ocw-common/sgx",
+	"sgx_tstd",
+	# Needed to match [patch.crates-io] getrandom in enclave-runtime/Cargo.toml
+	# IMPORTANT without this the "seed" in ocw-garble is always the same!
+	"rand/getrandom",
+	# TEMP
+	# "itp-rpc/sgx",
 ]
 runtime-benchmarks = ["frame-benchmarking/runtime-benchmarks"]
 try-runtime = ["frame-support/try-runtime"]
 
 [build-dependencies]
-prost-build = "0.11"
+# prost-build = "0.11"

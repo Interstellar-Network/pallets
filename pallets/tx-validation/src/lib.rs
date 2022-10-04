@@ -150,11 +150,15 @@ pub mod pallet {
     }
 
     // Errors inform users that something went wrong.
+    #[derive(Clone)]
     #[pallet::error]
     pub enum Error<T> {
+        // The given ipfs_cid was NOT present in CircuitServerMetadataMap
+        CircuitNotFound,
         // wrong OTP/permutation given -> Transaction failed
         TxWrongCodeGiven,
         // inputs SHOULD be [0;9] or ['0';'9']
+        // and inputs length MUST match expected length
         TxInvalidInputsGiven,
         /// Errors should have helpful documentation associated with them.
         StorageOverflow,
@@ -163,15 +167,24 @@ pub mod pallet {
     /// for now we reference the whole "DisplayStrippedCircuitsPackage" by just using the message_pgarbled_cid
     /// so we only pass "message_pgarbled_cid"
     pub fn store_metadata_aux<T: Config>(
-        origin: OriginFor<T>,
+        who: &T::AccountId,
         message_pgarbled_cid: Vec<u8>,
         message_digits: Vec<u8>,
         pinpad_digits: Vec<u8>,
     ) -> DispatchResult {
+        // TODO TOREMOVE
         // Check that the extrinsic was signed and get the signer.
         // This function will return an error if the extrinsic is not signed.
         // https://docs.substrate.io/v3/runtime/origins
-        let who = ensure_signed(origin)?;
+        // let who = ensure_signed(origin)?;
+
+        log::info!(
+            "[tx-validation] store_metadata_aux: who = {:?}, message_pgarbled_cid = {:?}, message_digits = {:?}, pinpad_digits = {:?}",
+            who,
+            sp_std::str::from_utf8(&message_pgarbled_cid).expect("message_pgarbled_cid utf8"),
+            &message_digits,
+            &pinpad_digits,
+        );
 
         crate::Pallet::<T>::deposit_event(Event::DEBUGNewDigitsSet {
             message_digits: message_digits.clone(),
@@ -189,6 +202,7 @@ pub mod pallet {
                     .unwrap(),
             },
         );
+        log::info!("[tx-validation] store_metadata_aux: done!");
 
         Ok(())
     }
@@ -207,7 +221,12 @@ pub mod pallet {
             message_digits: Vec<u8>,
             pinpad_digits: Vec<u8>,
         ) -> DispatchResult {
-            store_metadata_aux::<T>(origin, message_pgarbled_cid, message_digits, pinpad_digits)
+            // Check that the extrinsic was signed and get the signer.
+            // This function will return an error if the extrinsic is not signed.
+            // https://docs.substrate.io/v3/runtime/origins
+            let who = ensure_signed(origin)?;
+
+            store_metadata_aux::<T>(&who, message_pgarbled_cid, message_digits, pinpad_digits)
         }
 
         // NOTE: for now this extrinsic is called from the front-end so input_digits is ascii
@@ -222,13 +241,19 @@ pub mod pallet {
             // This function will return an error if the extrinsic is not signed.
             // https://docs.substrate.io/v3/runtime/origins
             let who = ensure_signed(origin)?;
+            log::info!(
+                "[tx-validation] check_input: who = {:?}, ipfs_cid = {:?}, input_digits = {:?}",
+                &who,
+                sp_std::str::from_utf8(&ipfs_cid).expect("ipfs_cid utf8"),
+                input_digits,
+            );
 
             // Compare with storage
             let display_validation_package = <CircuitServerMetadataMap<T>>::get(
                 who.clone(),
                 TryInto::<BoundedVec<u8, ConstU32<64>>>::try_into(ipfs_cid).unwrap(),
             )
-            .unwrap();
+            .ok_or(Error::<T>::CircuitNotFound)?;
 
             // convert ascii to digits
             // first step: Vec<u8> to str; that way we can then use "to_digit"
@@ -247,19 +272,24 @@ pub mod pallet {
             log::info!(
                 "[tx-validation] check_input: input_digits_str = {:?}, input_digits_int = {:?}, pinpad_permutation = {:?}",
                 input_digits_str,
-                sp_std::str::from_utf8(&input_digits_int).expect("input_digits_int utf8"),
-                sp_std::str::from_utf8(&pinpad_permutation).expect("pinpad_permutation utf8"),
+                input_digits_int,
+                pinpad_permutation,
             );
 
-            let computed_inputs_from_permutation: Vec<u8> = input_digits_int
+            // map user inputs -> true inputs
+            // eg user inputs:          [0,1]
+            // eg pinpad_permutation:   [9,8,7,0,1,...]
+            // true inputs -->          [9,8]
+            let computed_inputs_from_permutation: Result<Vec<u8>, Error<T>> = input_digits_int
                 .into_iter()
                 .map(|pinpad_index| {
                     pinpad_permutation
                         .get(pinpad_index as usize)
-                        .unwrap()
-                        .clone()
+                        .ok_or(Error::<T>::TxInvalidInputsGiven)
+                        .map(|idx| *idx)
                 })
                 .collect();
+            let computed_inputs_from_permutation = computed_inputs_from_permutation?;
             log::info!(
                 "[tx-validation] check_input: computed_inputs_from_permutation = {:?}, message_digits = {:?}",
                 &computed_inputs_from_permutation,
@@ -268,12 +298,14 @@ pub mod pallet {
 
             // TODO remove the key from the map; we DO NOT want to allow retrying
             if display_validation_package.message_digits == computed_inputs_from_permutation {
+                log::info!("[tx-validation] TxPass",);
                 Self::deposit_event(Event::TxPass { account_id: who });
                 // TODO on success: call next step/callback (ie pallet-tx-XXX)
-                return Ok(());
+                Ok(())
             } else {
+                log::info!("[tx-validation] TxFail",);
                 Self::deposit_event(Event::TxFail { account_id: who });
-                return Err(Error::<T>::TxWrongCodeGiven)?;
+                Err(Error::<T>::TxWrongCodeGiven.into())
             }
         }
     }

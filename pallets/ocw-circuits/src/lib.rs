@@ -1,9 +1,14 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
+// https://github.com/neoeinstein/protoc-gen-prost/issues/26
+#[allow(clippy::derive_partial_eq_without_eq)]
 mod interstellarpbapicircuits {
     // include_bytes!(concat!(env!("OUT_DIR")), "/interstellarpbapicircuits.rs");
     // include_bytes!(concat!(env!("OUT_DIR"), "/interstellarpbapicircuits.rs"));
-    include!(concat!(env!("OUT_DIR"), "/interstellarpbapicircuits.rs"));
+    //
+    // prost-build FAIL in enclave/SGX
+    // include!(concat!(env!("OUT_DIR"), "/interstellarpbapicircuits.rs"));
+    include!("../deps/protos/generated/rust/interstellarpbapicircuits.rs");
 }
 
 pub use pallet::*;
@@ -284,7 +289,7 @@ pub mod pallet {
             pinpad_skcd_cid: Vec<u8>,
             pinpad_nb_digits: u32,
         ) -> DispatchResult {
-            let who = ensure_signed(origin.clone())?;
+            let who = ensure_signed(origin)?;
             log::info!(
                 "[ocw-circuits] callback_new_display_circuits_package_signed: ({:?},{:?}),({:?},{:?}) for {:?}",
                 sp_std::str::from_utf8(&message_skcd_cid).expect("message_skcd_cid utf8"),
@@ -321,9 +326,8 @@ pub mod pallet {
             let block_number = T::BlockNumber::default();
             block_number.using_encoded(|encoded_bn| {
                 ONCHAIN_TX_KEY
-                    .clone()
-                    .into_iter()
-                    .chain(b"/".into_iter())
+                    .iter()
+                    .chain(b"/".iter())
                     .chain(encoded_bn)
                     .copied()
                     .collect::<Vec<u8>>()
@@ -371,7 +375,7 @@ pub mod pallet {
             let data = IndexingData {
                 verilog_ipfs_hash: verilog_cid,
                 block_number: 1,
-                grpc_kind: grpc_kind,
+                grpc_kind,
             };
             sp_io::offchain_index::set(&key, &data.encode());
         }
@@ -394,8 +398,8 @@ pub mod pallet {
 
             let indexing_data = oci_mem
                 .get::<IndexingData>()
-                .unwrap_or(Some(IndexingData::default()))
-                .unwrap_or(IndexingData::default());
+                .unwrap_or_else(|_| Some(IndexingData::default()))
+                .unwrap_or_default();
 
             let to_process_verilog_cid = indexing_data.verilog_ipfs_hash;
             let to_process_block_number = indexing_data.block_number;
@@ -447,14 +451,14 @@ pub mod pallet {
         /// Call the GRPC endpoint API_ENDPOINT_GENERIC_URL, encoding the request as grpc-web, and decoding the response
         ///
         /// return: a IPFS hash
-        fn call_grpc_generic(verilog_cid: &Vec<u8>) -> Result<GrpcCallReplyKind, Error<T>> {
-            let verilog_cid_str = sp_std::str::from_utf8(&verilog_cid)
+        fn call_grpc_generic(verilog_cid: &[u8]) -> Result<GrpcCallReplyKind, Error<T>> {
+            let verilog_cid_str = sp_std::str::from_utf8(verilog_cid)
                 .expect("call_grpc_generic from_utf8")
                 .to_owned();
             let input = crate::interstellarpbapicircuits::SkcdGenericFromIpfsRequest {
                 verilog_cid: verilog_cid_str,
             };
-            let body_bytes = ocw_common::encode_body(input);
+            let body_bytes = ocw_common::encode_body_grpc_web(input);
 
             // construct the full endpoint URI using:
             // - dynamic "URI root" from env
@@ -465,16 +469,18 @@ pub mod pallet {
             let uri_root = "PLACEHOLDER_no_std";
             let endpoint = format!("{}{}", uri_root, API_ENDPOINT_GENERIC_URL);
 
-            let (resp_bytes, resp_content_type) =
-                ocw_common::fetch_from_remote_grpc_web(body_bytes, &endpoint).map_err(|e| {
-                    log::error!("[ocw-circuits] call_grpc_generic error: {:?}", e);
-                    <Error<T>>::HttpFetchingError
-                })?;
+            let (resp_bytes, resp_content_type) = ocw_common::fetch_from_remote_grpc_web(
+                body_bytes,
+                &endpoint,
+                ocw_common::ContentType::GrpcWeb,
+            )
+            .map_err(|e| {
+                log::error!("[ocw-circuits] call_grpc_generic error: {:?}", e);
+                <Error<T>>::HttpFetchingError
+            })?;
 
-            let (resp, _trailers): (
-                crate::interstellarpbapicircuits::SkcdGenericFromIpfsReply,
-                _,
-            ) = ocw_common::decode_body(resp_bytes, resp_content_type);
+            let resp: crate::interstellarpbapicircuits::SkcdGenericFromIpfsReply =
+                ocw_common::decode_body_grpc_web(resp_bytes, resp_content_type);
             Ok(GrpcCallReplyKind::Generic(resp))
         }
 
@@ -526,11 +532,11 @@ pub mod pallet {
                     crate::interstellarpbapicircuits::SkcdDisplayRequest {
                         width: DEFAULT_PINPAD_WIDTH,
                         height: DEFAULT_PINPAD_HEIGHT,
-                        digits_bboxes: digits_bboxes,
+                        digits_bboxes,
                     }
                 };
 
-                let body_bytes = ocw_common::encode_body(input);
+                let body_bytes = ocw_common::encode_body_grpc_web(input);
 
                 // construct the full endpoint URI using:
                 // - dynamic "URI root" from env
@@ -541,14 +547,18 @@ pub mod pallet {
                 let uri_root = "PLACEHOLDER_no_std";
                 let endpoint = format!("{}{}", uri_root, API_ENDPOINT_DISPLAY_URL);
 
-                let (resp_bytes, resp_content_type) =
-                    ocw_common::fetch_from_remote_grpc_web(body_bytes, &endpoint).map_err(|e| {
-                        log::error!("[ocw-circuits] call_grpc_display error: {:?}", e);
-                        <Error<T>>::HttpFetchingError
-                    })?;
+                let (resp_bytes, resp_content_type) = ocw_common::fetch_from_remote_grpc_web(
+                    body_bytes,
+                    &endpoint,
+                    ocw_common::ContentType::GrpcWeb,
+                )
+                .map_err(|e| {
+                    log::error!("[ocw-circuits] call_grpc_display error: {:?}", e);
+                    <Error<T>>::HttpFetchingError
+                })?;
 
-                let (resp, _trailers): (crate::interstellarpbapicircuits::SkcdDisplayReply, _) =
-                    ocw_common::decode_body(resp_bytes, resp_content_type);
+                let resp: crate::interstellarpbapicircuits::SkcdDisplayReply =
+                    ocw_common::decode_body_grpc_web(resp_bytes, resp_content_type);
 
                 Ok(resp)
             }
@@ -578,7 +588,9 @@ pub mod pallet {
                     //   - `Some((account, Err(())))`: error occurred when sending the transaction
                     let signer = Signer::<T, T::AuthorityId>::all_accounts();
                     if !signer.can_sign() {
-                        log::error!("[ocw-circuits] No local accounts available. Consider adding one via `author_insertKey` RPC[ALTERNATIVE DEV ONLY check 'if config.offchain_worker.enabled' in service.rs]");
+                        log::error!(
+                            "[ocw-circuits] No local accounts available. Consider adding one via `author_insertKey` RPC[ALTERNATIVE DEV ONLY check 'if config.offchain_worker.enabled' in service.rs]"
+                        );
                     }
 
                     let results = signer.send_signed_transaction(|_account| match &result_reply {
