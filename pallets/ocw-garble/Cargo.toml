@@ -26,17 +26,14 @@ serde = { version = '1.0', default-features = false, features = ['derive'] }
 serde_json = { version = '1.0', default-features = false, features = ['alloc'] }
 rand_chacha = { version = "0.3.1", default-features = false }
 rand = { version = "0.8.5", default-features = false }
-
-# https://github.com/tokio-rs/prost#using-prost-in-a-no_std-crate
-prost = { version = "0.11", default-features = false, features = ["prost-derive"] }
-# "Only necessary if using Protobuf well-known types:"
-prost-types = { version = "0.11", default-features = false }
+bytes = { version = "1", default-features = false }
 
 ocw-common = { path = "../../ocw-common", default-features = false }
 pallet-tx-validation = { path = "../tx-validation", default-features = false }
 # pallet-ocw-circuits = { path = "../ocw-circuits", default-features = false }
 # TODO TOREMOVE
 pallet-timestamp = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.27"}
+lib-garble-rs = { git = "https://github.com/Interstellar-Network/lib-garble-rs.git", branch = "initial", default-features = false }
 
 # prost: could not find a way to use encode() in no_std context...
 # = note: the lang item is first defined in crate `std` (which `byteorder` depends on)
@@ -87,6 +84,7 @@ std = [
 	"pallet-tx-validation/std",
 	# TODO? "pallet-ocw-circuits/std",
 	"ocw-common/std",
+	"lib-garble-rs/std",
 	# TEMP
 	# "itp-types/std",
     # "itp-utils/std",
@@ -94,7 +92,8 @@ std = [
 	# "substrate-api-client/std",
 ]
 sgx = [
-    "ocw-common/sgx",
+	"ocw-common/sgx",
+	"lib-garble-rs/sgx",
 	"sgx_tstd",
 	# Needed to match [patch.crates-io] getrandom in enclave-runtime/Cargo.toml
 	# IMPORTANT without this the "seed" in ocw-garble is always the same!

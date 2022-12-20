@@ -1,17 +1,20 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-mod interstellarpbapigarble {
-    // include_bytes!(concat!(env!("OUT_DIR")), "/interstellarpbapigarble.rs");
-    // include_bytes!(concat!(env!("OUT_DIR"), "/interstellarpbapigarble.rs"));
-    // prost-build FAIL in enclave/SGX
-    // include!(concat!(env!("OUT_DIR"), "/interstellarpbapigarble.rs"));
-    include!("../deps/protos/generated/rust/interstellarpbapigarble.rs");
-}
+extern crate alloc;
+
+use alloc::string::String;
 
 pub use pallet::*;
 
+struct GarbleAndStripIpfsReply {
+    pgarbled_cid: String,
+    // TODO(M5) proper serialization; replace packmsg by "encoded inputs"
+    packmsg_cid: String,
+}
+
 #[frame_support::pallet]
 pub mod pallet {
+    use alloc::string::ToString;
     use codec::{Decode, Encode};
     use frame_support::pallet_prelude::*;
     use frame_system::ensure_signed;
@@ -40,9 +43,6 @@ pub mod pallet {
     /// `KeyTypeId` via the keystore to sign the transaction.
     /// The keys can be inserted manually via RPC (see `author_insertKey`).
     pub const KEY_TYPE: KeyTypeId = KeyTypeId(*b"garb");
-
-    const API_ENDPOINT_GARBLE_STRIP_URL: &str =
-        "/interstellarpbapigarble.GarbleApi/GarbleAndStripIpfs";
 
     /// Based on the above `KeyTypeId` we need to generate a pallet-specific crypto type wrapper.
     /// We can utilize the supported crypto kinds (`sr25519`, `ed25519` and `ecdsa`) and augment
@@ -271,7 +271,7 @@ pub mod pallet {
             let endpoint = get_node_uri();
 
             let (resp_bytes, resp_content_type) = ocw_common::fetch_from_remote_grpc_web(
-                prost::bytes::Bytes::from(serde_json::to_vec(&body_json).unwrap()),
+                bytes::Bytes::from(serde_json::to_vec(&body_json).unwrap()),
                 &endpoint,
                 ocw_common::ContentType::Json,
             )
@@ -570,9 +570,9 @@ pub mod pallet {
         /// param Vec<u8> = "digits"; generated randomly in "garble_and_strip_display_circuits_package_signed"
         ///   and passed all the way around
         GarbleAndStrip(
-            crate::interstellarpbapigarble::GarbleAndStripIpfsReply,
+            crate::GarbleAndStripIpfsReply,
             Vec<u8>,
-            crate::interstellarpbapigarble::GarbleAndStripIpfsReply,
+            crate::GarbleAndStripIpfsReply,
             Vec<u8>,
         ),
     }
@@ -611,38 +611,30 @@ pub mod pallet {
                 skcd_cid: Vec<u8>,
                 tx_msg: Vec<u8>,
                 digits: Vec<u8>,
-            ) -> Result<crate::interstellarpbapigarble::GarbleAndStripIpfsReply, Error<T>>
-            {
+            ) -> Result<crate::GarbleAndStripIpfsReply, Error<T>> {
                 let skcd_cid_str = sp_std::str::from_utf8(&skcd_cid)
                     .expect("call_grpc_garble_and_strip from_utf8")
                     .to_owned();
                 let tx_msg_str = sp_std::str::from_utf8(&tx_msg)
                     .expect("call_grpc_garble_and_strip from_utf8")
                     .to_owned();
-                let input = crate::interstellarpbapigarble::GarbleAndStripIpfsRequest {
-                    skcd_cid: skcd_cid_str,
-                    tx_msg: tx_msg_str,
-                    server_metadata: Some(crate::interstellarpbapigarble::CircuitServerMetadata {
-                        digits,
-                    }),
-                };
-                let body_bytes = ocw_common::encode_body_grpc_web(input);
+                // TODO
+                // let input = crate::interstellarpbapigarble::GarbleAndStripIpfsRequest {
+                //     skcd_cid: skcd_cid_str,
+                //     tx_msg: tx_msg_str,
+                //     server_metadata: Some(crate::interstellarpbapigarble::CircuitServerMetadata {
+                //         digits,
+                //     }),
+                // };
 
-                let endpoint = get_full_uri(API_ENDPOINT_GARBLE_STRIP_URL);
+                // TODO garble+strip, then upload IPFS
 
-                let (resp_bytes, resp_content_type) = ocw_common::fetch_from_remote_grpc_web(
-                    body_bytes,
-                    &endpoint,
-                    ocw_common::ContentType::GrpcWeb,
-                )
-                .map_err(|e| {
-                    log::error!("[ocw-garble] call_grpc_garble_and_strip error: {:?}", e);
-                    <Error<T>>::HttpFetchingError
-                })?;
-
-                let resp: crate::interstellarpbapigarble::GarbleAndStripIpfsReply =
-                    ocw_common::decode_body_grpc_web(resp_bytes, resp_content_type);
-                Ok(resp)
+                // TODO
+                // let resp: GarbleAndStripIpfsReply = ;
+                Ok(crate::GarbleAndStripIpfsReply {
+                    pgarbled_cid: "TODO".to_string(),
+                    packmsg_cid: "TODO".to_string(),
+                })
             }
 
             // TODO pass correct params for pinpad and message
