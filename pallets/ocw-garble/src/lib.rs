@@ -44,6 +44,8 @@ pub mod pallet {
     /// The keys can be inserted manually via RPC (see `author_insertKey`).
     pub const KEY_TYPE: KeyTypeId = KeyTypeId(*b"garb");
 
+    const IPFS_ROOT_URL: &str = "http://127.0.0.1:5001";
+
     /// Based on the above `KeyTypeId` we need to generate a pallet-specific crypto type wrapper.
     /// We can utilize the supported crypto kinds (`sr25519`, `ed25519` and `ecdsa`) and augment
     /// them with the pallet-specific identifier.
@@ -207,6 +209,8 @@ pub mod pallet {
         // Error returned when fetching github info
         HttpFetchingError,
         DeserializeError,
+        IpfsClientCreationError,
+        IpfsCallError,
     }
 
     #[pallet::hooks]
@@ -627,12 +631,29 @@ pub mod pallet {
                 //     }),
                 // };
 
-                // TODO garble+strip, then upload IPFS
+                let ipfs_client =
+                    lib_garble_rs::ipfs::IpfsClient::new(IPFS_ROOT_URL).map_err(|err| {
+                        log::error!("[ocw-garble] ipfs client new error: {:?}", err);
+                        <Error<T>>::IpfsClientCreationError
+                    })?;
+                let skcd_buf = ipfs_client.ipfs_cat(&skcd_cid_str).map_err(|err| {
+                    log::error!("[ocw-garble] ipfs call ipfs_cat error: {:?}", err);
+                    <Error<T>>::IpfsCallError
+                })?;
+                let garb = lib_garble_rs::garble_skcd(&skcd_buf);
+
+                // TODO "packsmg", then serialize "garb"
+                // MUST use tx_msg_str,digits
+
+                let ipfs_add_response = ipfs_client.ipfs_add(b"").map_err(|err| {
+                    log::error!("[ocw-garble] ipfs call ipfs_add error: {:?}", err);
+                    <Error<T>>::IpfsCallError
+                })?;
 
                 // TODO
                 // let resp: GarbleAndStripIpfsReply = ;
                 Ok(crate::GarbleAndStripIpfsReply {
-                    pgarbled_cid: "TODO".to_string(),
+                    pgarbled_cid: ipfs_add_response.hash,
                     packmsg_cid: "TODO".to_string(),
                 })
             }
