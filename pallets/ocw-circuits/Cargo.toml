@@ -15,8 +15,8 @@ targets = ["x86_64-unknown-linux-gnu"]
 
 [dependencies]
 log = { version = "0.4", default-features = false }
-serde = { version = '1.0.130', default-features = false, features = ['derive'] }
-serde_json = { version = '1.0.67', default-features = false, features = ['alloc'] }
+serde = { version = "1.0", default-features = false, features = ['derive'] }
+serde_json = { version = "1", default-features = false, features = ['alloc'] }
 
 # https://github.com/tokio-rs/prost#using-prost-in-a-no_std-crate
 prost = { version = "0.11", default-features = false, features = ["prost-derive"] }
