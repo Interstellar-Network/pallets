@@ -6,6 +6,7 @@ use alloc::string::String;
 
 pub use pallet::*;
 
+// TODO(interstellar) remove; and cascade
 struct GarbleAndStripIpfsReply {
     pgarbled_cid: String,
     // TODO(M5) proper serialization; replace packmsg by "encoded inputs"
@@ -622,17 +623,9 @@ pub mod pallet {
                 let tx_msg_str = sp_std::str::from_utf8(&tx_msg)
                     .expect("call_grpc_garble_and_strip from_utf8")
                     .to_owned();
-                // TODO
-                // let input = crate::interstellarpbapigarble::GarbleAndStripIpfsRequest {
-                //     skcd_cid: skcd_cid_str,
-                //     tx_msg: tx_msg_str,
-                //     server_metadata: Some(crate::interstellarpbapigarble::CircuitServerMetadata {
-                //         digits,
-                //     }),
-                // };
 
                 let ipfs_client =
-                    lib_garble_rs::ipfs::IpfsClient::new(IPFS_ROOT_URL).map_err(|err| {
+                    ipfs_client_http_req::IpfsClient::new(IPFS_ROOT_URL).map_err(|err| {
                         log::error!("[ocw-garble] ipfs client new error: {:?}", err);
                         <Error<T>>::IpfsClientCreationError
                     })?;
@@ -644,6 +637,9 @@ pub mod pallet {
 
                 // TODO "packsmg", then serialize "garb"
                 // MUST use tx_msg_str,digits
+                let encoded_garbler_inputs = garb.encode_garbler_inputs(&[]);
+                let serialized_package_for_eval =
+                    lib_garble_rs::serialize_for_evaluator(garb, encoded_garbler_inputs);
 
                 let ipfs_add_response = ipfs_client.ipfs_add(b"").map_err(|err| {
                     log::error!("[ocw-garble] ipfs call ipfs_add error: {:?}", err);
