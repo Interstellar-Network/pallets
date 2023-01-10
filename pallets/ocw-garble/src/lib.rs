@@ -633,18 +633,26 @@ pub mod pallet {
                     log::error!("[ocw-garble] ipfs call ipfs_cat error: {:?}", err);
                     <Error<T>>::IpfsCallError
                 })?;
-                let garb = lib_garble_rs::garble_skcd(&skcd_buf);
 
-                // TODO "packsmg", then serialize "garb"
-                // MUST use tx_msg_str,digits
-                let encoded_garbler_inputs = garb.encode_garbler_inputs(&[]);
+                let garb = lib_garble_rs::garble_skcd(&skcd_buf).unwrap();
+                // "packsmg"
+                let encoded_garbler_inputs =
+                    lib_garble_rs::garbled_display_circuit_prepare_garbler_inputs(
+                        &garb,
+                        &digits,
+                        &tx_msg_str,
+                    )
+                    .unwrap();
+                // then serialize "garb" and "packmsg"
                 let serialized_package_for_eval =
-                    lib_garble_rs::serialize_for_evaluator(garb, encoded_garbler_inputs);
+                    lib_garble_rs::serialize_for_evaluator(garb, encoded_garbler_inputs).unwrap();
 
-                let ipfs_add_response = ipfs_client.ipfs_add(b"").map_err(|err| {
-                    log::error!("[ocw-garble] ipfs call ipfs_add error: {:?}", err);
-                    <Error<T>>::IpfsCallError
-                })?;
+                let ipfs_add_response = ipfs_client
+                    .ipfs_add(&serialized_package_for_eval)
+                    .map_err(|err| {
+                        log::error!("[ocw-garble] ipfs call ipfs_add error: {:?}", err);
+                        <Error<T>>::IpfsCallError
+                    })?;
 
                 // TODO
                 // let resp: GarbleAndStripIpfsReply = ;

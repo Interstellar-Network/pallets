@@ -6,7 +6,6 @@ authors = ['Substrate DevHub <https://github.com/substrate-developer-hub>']
 repository = "https://github.com/jimmychu0807/substrate-offchain-worker-demo"
 description = "A pallet that demonstrates off-chain workers feature in Substrate"
 license = "GPL-3.0-or-later"
-build = "build.rs"
 
 [package.metadata.substrate]
 categories = [

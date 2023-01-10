@@ -1,6 +1,3 @@
 [submodule "pallets/ocw-circuits/deps/protos"]
 	path = pallets/ocw-circuits/deps/protos
 	url = ../protos.git
-[submodule "pallets/ocw-garble/deps/protos"]
-	path = pallets/ocw-garble/deps/protos
-	url = ../protos.git
