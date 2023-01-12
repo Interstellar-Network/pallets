@@ -490,6 +490,9 @@ pub mod pallet {
                 body_bytes,
                 &endpoint,
                 ocw_common::ContentType::GrpcWeb,
+                // Since the "Swanky refactor" this is quite slow; around 45-50s locally
+                // But add some margin for CI and demos
+                core::time::Duration::from_millis(120_000),
             )
             .map_err(|e| {
                 log::error!("[ocw-circuits] call_grpc_generic error: {:?}", e);
@@ -568,6 +571,9 @@ pub mod pallet {
                     body_bytes,
                     &endpoint,
                     ocw_common::ContentType::GrpcWeb,
+                    // Since the "Swanky refactor" this is quite slow; around 45-50s locally
+                    // But add some margin for CI and demos
+                    core::time::Duration::from_millis(120_000),
                 )
                 .map_err(|e| {
                     log::error!("[ocw-circuits] call_grpc_display error: {:?}", e);

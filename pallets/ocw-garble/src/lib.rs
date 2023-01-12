@@ -291,6 +291,7 @@ pub mod pallet {
                 bytes::Bytes::from(serde_json::to_vec(&body_json).unwrap()),
                 &endpoint,
                 ocw_common::ContentType::Json,
+                core::time::Duration::from_millis(2_000),
             )
             .map_err(|e| {
                 log::error!("[ocw-garble] call_grpc_garble error: {:?}", e);
