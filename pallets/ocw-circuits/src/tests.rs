@@ -3,6 +3,7 @@ use crate::{mock::*, Error};
 use frame_support::assert_ok;
 use frame_support::pallet_prelude::ConstU32;
 use frame_support::{assert_err, assert_noop, BoundedVec};
+use test_log::test;
 
 fn test_pub() -> sp_core::sr25519::Public {
     sp_core::sr25519::Public::from_raw([1u8; 32])

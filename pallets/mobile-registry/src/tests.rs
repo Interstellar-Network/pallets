@@ -2,6 +2,7 @@ use crate::{mock::*, Error};
 use frame_support::assert_ok;
 use frame_support::pallet_prelude::ConstU32;
 use frame_support::{assert_err, assert_noop, BoundedVec};
+use test_log::test;
 
 fn test_register_mobile_ok(pub_key: Vec<u8>) {
     new_test_ext().execute_with(|| {

@@ -19,6 +19,7 @@ use sp_runtime::{
     traits::{BlakeTwo256, Extrinsic as ExtrinsicT, IdentifyAccount, IdentityLookup, Verify},
     RuntimeAppPublic,
 };
+use tests_common::foreign_ipfs::ForeignNode;
 
 type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
 type Block = frame_system::mocking::MockBlock<Test>;
@@ -109,7 +110,7 @@ impl pallet_ocw_garble::Config for Test {
 }
 
 // Build genesis storage according to the mock runtime.
-pub fn new_test_ext() -> sp_io::TestExternalities {
+pub fn new_test_ext() -> (sp_io::TestExternalities, ForeignNode) {
     std::env::set_var(
         "INTERSTELLAR_URI_NODE",
         "PLACEHOLDER_INTERSTELLAR_URI_NODE_fn_new_test_ext",
@@ -121,7 +122,10 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
 
     get_ocw_circuits_storage_value_response(&mut state.write());
 
-    t
+    // NOTE: PORT hardcoded in lib.rs so we can use a dynamic one
+    let foreign_node = ForeignNode::new(Some("5001"));
+
+    (t, foreign_node)
 
     // // system::GenesisConfig::default()
     // //     .build_storage::<Test>()

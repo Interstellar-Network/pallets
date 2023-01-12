@@ -6,6 +6,9 @@ mod mock;
 #[cfg(test)]
 mod tests;
 
+#[cfg(test)]
+mod tests_common;
+
 extern crate alloc;
 
 use alloc::string::String;
@@ -676,18 +679,20 @@ pub mod pallet {
                 message_skcd_ipfs_cid,
                 tx_msg,
                 message_digits.clone(),
-            );
+            )
+            .expect("message_reply failed!");
             let pinpad_reply = call_grpc_garble_and_strip_one::<T>(
                 pinpad_skcd_ipfs_cid,
                 vec![],
                 pinpad_digits.clone(),
-            );
+            )
+            .expect("message_reply failed!");
 
             // TODO pass correct params for pinpad and message
             Ok(GrpcCallReplyKind::GarbleAndStrip(
-                message_reply.expect("message_reply failed!"),
+                message_reply,
                 message_digits,
-                pinpad_reply.expect("pinpad_reply failed!"),
+                pinpad_reply,
                 pinpad_digits,
             ))
         }

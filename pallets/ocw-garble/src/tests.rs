@@ -3,13 +3,15 @@ use crate::{mock::*, Error};
 use frame_support::assert_ok;
 use frame_support::pallet_prelude::ConstU32;
 use frame_support::{assert_err, assert_noop, BoundedVec};
+use test_log::test;
 
 fn test_pub() -> sp_core::sr25519::Public {
     sp_core::sr25519::Public::from_raw([1u8; 32])
 }
 
 fn test_garble_and_strip_display_circuits_package_signed() {
-    new_test_ext().execute_with(|| {
+    let (mut t, foreign_node) = new_test_ext();
+    t.execute_with(|| {
         let account_id = test_pub();
 
         // Dispatch a signed extrinsic.

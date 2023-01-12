@@ -69,3 +69,7 @@ try-runtime = ["frame-support/try-runtime"]
 
 # pb-rs = "0.9.1"
 # walkdir = "2.3.2"
+
+[dev-dependencies]
+env_logger = "0.10.0"
+test-log = "0.2"
