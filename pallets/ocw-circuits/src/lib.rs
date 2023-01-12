@@ -11,31 +11,43 @@ mod interstellarpbapicircuits {
     include!("../deps/protos/generated/rust/interstellarpbapicircuits.rs");
 }
 
+#[cfg(test)]
+mod mock;
+
+#[cfg(test)]
+mod tests;
+
+use codec::{Decode, Encode};
+use frame_support::dispatch::{Dispatchable, GetDispatchInfo};
+use frame_support::pallet_prelude::*;
+use frame_system::ensure_signed;
+use frame_system::offchain::AppCrypto;
+use frame_system::offchain::CreateSignedTransaction;
+use frame_system::offchain::SendSignedTransaction;
+use frame_system::offchain::Signer;
+use frame_system::pallet_prelude::*;
+use scale_info::prelude::*;
+use serde::Deserialize;
+use sp_core::crypto::KeyTypeId;
+use sp_core::offchain::Duration;
+use sp_runtime::offchain::storage::StorageValueRef;
+use sp_runtime::offchain::storage_lock::BlockAndTime;
+use sp_runtime::offchain::storage_lock::StorageLock;
+use sp_runtime::traits::BlockNumberProvider;
+use sp_runtime::transaction_validity::InvalidTransaction;
+use sp_runtime::RuntimeDebug;
+use sp_std::borrow::ToOwned;
+use sp_std::prelude::*;
+use sp_std::str;
+use sp_std::vec::Vec;
+
 pub use pallet::*;
 
 #[frame_support::pallet]
 pub mod pallet {
-    use codec::{Decode, Encode};
+    use super::*;
     use frame_support::pallet_prelude::*;
-    use frame_system::ensure_signed;
-    use frame_system::offchain::AppCrypto;
-    use frame_system::offchain::CreateSignedTransaction;
-    use frame_system::offchain::SendSignedTransaction;
-    use frame_system::offchain::Signer;
     use frame_system::pallet_prelude::*;
-    use scale_info::prelude::*;
-    use serde::Deserialize;
-    use sp_core::crypto::KeyTypeId;
-    use sp_core::offchain::Duration;
-    use sp_runtime::offchain::storage::StorageValueRef;
-    use sp_runtime::offchain::storage_lock::BlockAndTime;
-    use sp_runtime::offchain::storage_lock::StorageLock;
-    use sp_runtime::traits::BlockNumberProvider;
-    use sp_runtime::transaction_validity::InvalidTransaction;
-    use sp_runtime::RuntimeDebug;
-    use sp_std::borrow::ToOwned;
-    use sp_std::str;
-    use sp_std::vec::Vec;
 
     /// Defines application identifier for crypto keys of this module.
     ///
@@ -103,7 +115,12 @@ pub mod pallet {
         /// The overarching event type.
         type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
         /// The overarching dispatch call type.
-        type Call: From<Call<Self>>;
+        type RuntimeCall: From<Call<Self>>;
+        /// A dispatchable call.
+        // type RuntimeCall: Parameter
+        //     + Dispatchable<RuntimeOrigin = Self::RuntimeOrigin>
+        //     + GetDispatchInfo
+        //     + From<frame_system::Call<Self>>;
         /// The identifier type for an offchain worker.
         type AuthorityId: AppCrypto<Self::Public, Self::Signature>;
     }
