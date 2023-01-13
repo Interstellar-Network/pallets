@@ -102,10 +102,18 @@ parameter_types! {
     pub const UnsignedPriority: u64 = 1 << 20;
 }
 
+pub struct MyTestCallbackMock;
+impl MyTestCallback for MyTestCallbackMock {
+    fn my_cb(bytes: &[u8]) {
+        println!("bytes");
+    }
+}
+
 impl pallet_ocw_garble::Config for Test {
     type Event = Event;
     type RuntimeCall = Call;
     type AuthorityId = crypto::TestAuthId;
+    type HookCallGrpGarbleAndStripSerializedPackageForEval = MyTestCallbackMock;
 }
 
 // Build genesis storage according to the mock runtime.
@@ -125,6 +133,7 @@ pub fn new_test_ext() -> (sp_io::TestExternalities, ForeignNode) {
 
     get_ocw_circuits_storage_value_response(&mut state.write());
     mock_ipfs_cat_response(&mut state.write(), foreign_node.api_port);
+    mock_ipfs_add_response(&mut state.write(), foreign_node.api_port);
 
     (t, foreign_node)
 
@@ -182,6 +191,21 @@ fn mock_ipfs_cat_response(state: &mut testing::OffchainState, api_port: u16) {
             "http://127.0.0.1:{}/api/v0/cat?arg=QmbiE5CsRMJue1kTUxMZQbiN9JyNPu8HBgZ4a8rjm4CSwf",
             api_port
         ),
+        // cf "fn decode_rpc_json" for the expected format
+        response: Some(
+            include_bytes!("../tests/data/display_message_120x52_2digits.skcd.pb.bin").to_vec(),
+        ),
+        sent: true,
+        headers: vec![],
+        response_headers: vec![("content-type".into(), "text/plain".into())],
+        ..Default::default()
+    });
+}
+
+fn mock_ipfs_add_response(state: &mut testing::OffchainState, api_port: u16) {
+    state.expect_request(testing::PendingRequest {
+        method: "POST".into(),
+        uri: format!("http://127.0.0.1:{}/api/v0/add", api_port),
         // cf "fn decode_rpc_json" for the expected format
         response: Some(
             include_bytes!("../tests/data/display_message_120x52_2digits.skcd.pb.bin").to_vec(),

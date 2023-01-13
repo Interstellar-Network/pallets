@@ -42,6 +42,15 @@ struct GarbleAndStripIpfsReply {
     packmsg_cid: String,
 }
 
+#[cfg(test)]
+pub trait MyTestCallback {
+    fn my_cb(bytes: &[u8]) {}
+}
+
+/// Empty implementation in case no callbacks are required.
+#[cfg(test)]
+impl MyTestCallback for () {}
+
 #[frame_support::pallet]
 pub mod pallet {
     use super::*;
@@ -108,6 +117,8 @@ pub mod pallet {
         type RuntimeCall: From<Call<Self>>;
         /// The identifier type for an offchain worker.
         type AuthorityId: AppCrypto<Self::Public, Self::Signature>;
+        #[cfg(test)]
+        type HookCallGrpGarbleAndStripSerializedPackageForEval: MyTestCallback;
     }
 
     /// Easy way to make a link b/w a "message" and "pinpad" circuits
@@ -625,7 +636,7 @@ pub mod pallet {
             pinpad_digits: Vec<u8>,
         ) -> Result<GrpcCallReplyKind, Error<T>> {
             /// INTERNAL: call API_ENDPOINT_GARBLE_STRIP_URL for one circuits
-            fn call_grpc_garble_and_strip_one<T>(
+            fn call_grpc_garble_and_strip_one<T: Config>(
                 skcd_cid: Vec<u8>,
                 tx_msg: Vec<u8>,
                 digits: Vec<u8>,
@@ -659,6 +670,12 @@ pub mod pallet {
                 // then serialize "garb" and "packmsg"
                 let serialized_package_for_eval =
                     lib_garble_rs::serialize_for_evaluator(garb, encoded_garbler_inputs).unwrap();
+
+                // the tests need the full body bytes to mock correctly...
+                #[cfg(test)]
+                T::HookCallGrpGarbleAndStripSerializedPackageForEval::my_cb(
+                    &serialized_package_for_eval,
+                );
 
                 let ipfs_add_response = ipfs_client
                     .ipfs_add(&serialized_package_for_eval)
