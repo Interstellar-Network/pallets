@@ -42,9 +42,13 @@ struct GarbleAndStripIpfsReply {
     packmsg_cid: String,
 }
 
+/// TEST ONLY "hook"
+/// cf https://github.com/paritytech/substrate/pull/12307/files
 #[cfg(test)]
 pub trait MyTestCallback {
-    fn my_cb(bytes: &[u8]) {}
+    fn my_test_hook(input: Vec<u8>) -> Vec<u8> {
+        input
+    }
 }
 
 /// Empty implementation in case no callbacks are required.
@@ -673,9 +677,7 @@ pub mod pallet {
 
                 // the tests need the full body bytes to mock correctly...
                 #[cfg(test)]
-                T::HookCallGrpGarbleAndStripSerializedPackageForEval::my_cb(
-                    &serialized_package_for_eval,
-                );
+                let serialized_package_for_eval = T::HookCallGrpGarbleAndStripSerializedPackageForEval::my_test_hook(serialized_package_for_eval);
 
                 let ipfs_add_response = ipfs_client
                     .ipfs_add(&serialized_package_for_eval)

@@ -102,10 +102,13 @@ parameter_types! {
     pub const UnsignedPriority: u64 = 1 << 20;
 }
 
+const OVERWRITTEN_SERIALIZED_IPFS_ADD: &[u8] = &[42, 42];
+
 pub struct MyTestCallbackMock;
 impl MyTestCallback for MyTestCallbackMock {
-    fn my_cb(bytes: &[u8]) {
-        println!("bytes");
+    fn my_test_hook(input: Vec<u8>) -> Vec<u8> {
+        // MUST match mock_ipfs_add_response
+        OVERWRITTEN_SERIALIZED_IPFS_ADD.to_vec()
     }
 }
 
@@ -131,8 +134,22 @@ pub fn new_test_ext() -> (sp_io::TestExternalities, ForeignNode) {
         format!("http://127.0.0.1:{}", foreign_node.api_port),
     );
 
+    // WARNING: order matters!
     get_ocw_circuits_storage_value_response(&mut state.write());
-    mock_ipfs_cat_response(&mut state.write(), foreign_node.api_port);
+    // The IPFS cids MUST match the encoded values in "get_ocw_circuits_storage_value_response"
+    mock_ipfs_cat_response(
+        &mut state.write(),
+        foreign_node.api_port,
+        "QmbiE5CsRMJue1kTUxMZQbiN9JyNPu8HBgZ4a8rjm4CSwf",
+        include_bytes!("../tests/data/display_message_120x52_2digits.skcd.pb.bin"),
+    );
+    mock_ipfs_add_response(&mut state.write(), foreign_node.api_port);
+    mock_ipfs_cat_response(
+        &mut state.write(),
+        foreign_node.api_port,
+        "QmZxpCidBpfbLtgU4yd4WJ1MvTCnU91nxg9A2Da7sZpicm",
+        include_bytes!("../tests/data/display_pinpad_590x50.skcd.pb.bin"),
+    );
     mock_ipfs_add_response(&mut state.write(), foreign_node.api_port);
 
     (t, foreign_node)
@@ -175,6 +192,7 @@ fn get_ocw_circuits_storage_value_response(state: &mut testing::OffchainState) {
         method: "POST".into(),
         uri: "http://127.0.0.1:4242".into(),
         // cf "fn decode_rpc_json" for the expected format
+        // MUST match the param passed to "mock_ipfs_cat_response"
         response: Some(br#"{"id": "1", "jsonrpc": "2.0", "result": "0xb8516d626945354373524d4a7565316b5455784d5a5162694e394a794e5075384842675a346138726a6d344353776602000000b8516d5a7870436964427066624c74675534796434574a314d7654436e5539316e7867394132446137735a7069636d0a000000"}"#.to_vec()),
         sent: true,
         headers: vec![("Content-Type".into(), "application/json;charset=utf-8".into())],
@@ -184,17 +202,17 @@ fn get_ocw_circuits_storage_value_response(state: &mut testing::OffchainState) {
     });
 }
 
-fn mock_ipfs_cat_response(state: &mut testing::OffchainState, api_port: u16) {
+fn mock_ipfs_cat_response(
+    state: &mut testing::OffchainState,
+    api_port: u16,
+    ipfs_cid: &str,
+    file_bytes: &[u8],
+) {
     state.expect_request(testing::PendingRequest {
         method: "POST".into(),
-        uri: format!(
-            "http://127.0.0.1:{}/api/v0/cat?arg=QmbiE5CsRMJue1kTUxMZQbiN9JyNPu8HBgZ4a8rjm4CSwf",
-            api_port
-        ),
+        uri: format!("http://127.0.0.1:{}/api/v0/cat?arg={}", api_port, ipfs_cid),
         // cf "fn decode_rpc_json" for the expected format
-        response: Some(
-            include_bytes!("../tests/data/display_message_120x52_2digits.skcd.pb.bin").to_vec(),
-        ),
+        response: Some(file_bytes.to_vec()),
         sent: true,
         headers: vec![],
         response_headers: vec![("content-type".into(), "text/plain".into())],
@@ -207,11 +225,27 @@ fn mock_ipfs_add_response(state: &mut testing::OffchainState, api_port: u16) {
         method: "POST".into(),
         uri: format!("http://127.0.0.1:{}/api/v0/add", api_port),
         // cf "fn decode_rpc_json" for the expected format
-        response: Some(
-            include_bytes!("../tests/data/display_message_120x52_2digits.skcd.pb.bin").to_vec(),
-        ),
+        response: Some(br#"{"Name":"TODO_path","Hash":"QmUjBgZpddDdKZkAFszLyrX2YkBLPKLmkKWJFsU1fTcJWo","Size":"36"}"#.to_vec()),
         sent: true,
-        headers: vec![],
+        headers: vec![(
+            "Content-Type".into(),
+            "multipart/form-data;boundary=\"boundary\"".into(),
+        )],
+        // MUST match MyTestCallbackMock
+        // But it adds the whole "multipart" boundaries etc
+        body: vec![
+            45, 45, 98, 111, 117, 110, 100, 97, 114, 121, 13, 10, 67, 111, 110, 116, 101, 110, 116,
+            45, 68, 105, 115, 112, 111, 115, 105, 116, 105, 111, 110, 58, 32, 102, 111, 114, 109,
+            45, 100, 97, 116, 97, 59, 32, 110, 97, 109, 101, 61, 34, 102, 105, 108, 101, 34, 59,
+            32, 102, 105, 108, 101, 110, 97, 109, 101, 61, 34, 84, 79, 68, 79, 95, 112, 97, 116,
+            104, 34, 13, 10, 67, 111, 110, 116, 101, 110, 116, 45, 84, 121, 112, 101, 58, 32, 97,
+            112, 112, 108, 105, 99, 97, 116, 105, 111, 110, 47, 111, 99, 116, 101, 116, 45, 115,
+            116, 114, 101, 97, 109, 13, 10, 13, 10, //
+            // OVERWRITTEN_SERIALIZED_IPFS_ADD
+            42, 42, //
+            //
+            13, 10, 45, 45, 98, 111, 117, 110, 100, 97, 114, 121, 45, 45,
+        ],
         response_headers: vec![("content-type".into(), "text/plain".into())],
         ..Default::default()
     });
