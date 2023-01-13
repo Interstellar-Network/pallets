@@ -1,6 +1,5 @@
 use crate::{mock::*, Error};
 use frame_support::assert_ok;
-use frame_support::pallet_prelude::ConstU32;
 use frame_support::{assert_err, assert_noop, BoundedVec};
 use test_log::test;
 

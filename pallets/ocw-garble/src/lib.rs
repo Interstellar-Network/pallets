@@ -57,8 +57,6 @@ pub mod pallet {
     /// The keys can be inserted manually via RPC (see `author_insertKey`).
     pub const KEY_TYPE: KeyTypeId = KeyTypeId(*b"garb");
 
-    const IPFS_ROOT_URL: &str = "http://127.0.0.1:5001";
-
     /// Based on the above `KeyTypeId` we need to generate a pallet-specific crypto type wrapper.
     /// We can utilize the supported crypto kinds (`sr25519`, `ed25519` and `ecdsa`) and augment
     /// them with the pallet-specific identifier.
@@ -287,17 +285,19 @@ pub mod pallet {
 
             let endpoint = get_node_uri();
 
-            let (resp_bytes, resp_content_type) = ocw_common::fetch_from_remote_grpc_web(
-                bytes::Bytes::from(serde_json::to_vec(&body_json).unwrap()),
-                &endpoint,
-                ocw_common::ContentType::Json,
-                core::time::Duration::from_millis(2_000),
-            )
-            .map_err(|e| {
-                log::error!("[ocw-garble] call_grpc_garble error: {:?}", e);
-                <Error<T>>::HttpFetchingError
-            })
-            .unwrap();
+            let (resp_bytes, resp_content_type) =
+                ocw_common::sp_offchain_fetch_from_remote_grpc_web(
+                    Some(bytes::Bytes::from(serde_json::to_vec(&body_json).unwrap())),
+                    &endpoint,
+                    ocw_common::RequestMethod::Post,
+                    Some(ocw_common::ContentType::Json),
+                    core::time::Duration::from_millis(2_000),
+                )
+                .map_err(|e| {
+                    log::error!("[ocw-garble] call_grpc_garble error: {:?}", e);
+                    <Error<T>>::HttpFetchingError
+                })
+                .unwrap();
 
             let response: DisplaySkcdPackageCopy =
                 ocw_common::decode_rpc_json(resp_bytes, resp_content_type);
@@ -638,7 +638,7 @@ pub mod pallet {
                     .to_owned();
 
                 let ipfs_client =
-                    ipfs_client_http_req::IpfsClient::new(IPFS_ROOT_URL).map_err(|err| {
+                    ipfs_client_http_req::IpfsClient::new(&get_ipfs_uri()).map_err(|err| {
                         log::error!("[ocw-garble] ipfs client new error: {:?}", err);
                         <Error<T>>::IpfsClientCreationError
                     })?;
@@ -768,30 +768,19 @@ pub mod pallet {
         }
     }
 
-    /// construct the full endpoint URI using:
-    /// - dynamic "URI root" from env
-    #[cfg(all(not(feature = "sgx"), feature = "std"))]
-    fn get_full_uri(endpoint: &str) -> String {
-        let uri_root = std::env::var("INTERSTELLAR_URI_ROOT_API_GARBLE").unwrap();
+    fn get_ipfs_uri() -> alloc::string::String {
+        #[cfg(all(not(feature = "sgx"), feature = "std"))]
+        return std::env::var("IPFS_ROOT_URL").unwrap();
 
-        format!("{}{}", uri_root, endpoint)
-    }
-    #[cfg(all(not(feature = "std"), feature = "sgx"))]
-    fn get_full_uri(endpoint: &str) -> sgx_tstd::string::String {
-        let uri_root = sgx_tstd::env::var("INTERSTELLAR_URI_ROOT_API_GARBLE").unwrap();
-
-        format!("{}{}", uri_root, endpoint)
+        #[cfg(all(not(feature = "std"), feature = "sgx"))]
+        return sgx_tstd::env::var("IPFS_ROOT_URL").unwrap();
     }
 
-    /// Like get_full_uri, but return the node URI(ie the address of `integritee-node` RPC)
-    #[cfg(all(not(feature = "sgx"), feature = "std"))]
-    fn get_node_uri() -> String {
-        std::env::var("INTERSTELLAR_URI_NODE").unwrap()
-    }
-    #[cfg(all(not(feature = "std"), feature = "sgx"))]
-    fn get_node_uri() -> sgx_tstd::string::String {
-        let uri_root = sgx_tstd::env::var("INTERSTELLAR_URI_NODE").unwrap();
+    fn get_node_uri() -> alloc::string::String {
+        #[cfg(all(not(feature = "sgx"), feature = "std"))]
+        return std::env::var("INTERSTELLAR_URI_NODE").unwrap();
 
-        format!("{}", uri_root)
+        #[cfg(all(not(feature = "std"), feature = "sgx"))]
+        return sgx_tstd::env::var("INTERSTELLAR_URI_NODE").unwrap();
     }
 }

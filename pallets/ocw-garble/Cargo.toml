@@ -27,13 +27,15 @@ rand_chacha = { version = "0.3.1", default-features = false }
 rand = { version = "0.8.5", default-features = false }
 bytes = { version = "1", default-features = false }
 
-ocw-common = { path = "../../ocw-common", default-features = false }
+ocw-common = { path = "../../ocw-common", default-features = false, features = ["sp_offchain"] }
 pallet-tx-validation = { path = "../tx-validation", default-features = false }
 # pallet-ocw-circuits = { path = "../ocw-circuits", default-features = false }
 # TODO TOREMOVE
 pallet-timestamp = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.27"}
-lib-garble-rs = { git = "https://github.com/Interstellar-Network/lib-garble-rs.git", branch = "initial", default-features = false }
-ipfs-client-http-req = { git = "https://github.com/Interstellar-Network/lib-garble-rs.git", branch = "initial", default-features = false }
+# TODO git = "https://github.com/Interstellar-Network/lib-garble-rs.git", branch = "initial"
+lib-garble-rs = { path = "../../../lib-garble-rs/lib-garble-rs", default-features = false }
+# TODO git = "https://github.com/Interstellar-Network/lib-garble-rs.git", branch = "initial"
+ipfs-client-http-req = { path = "../../../lib-garble-rs/ipfs-client-http-req", default-features = false }
 
 # prost: could not find a way to use encode() in no_std context...
 # = note: the lang item is first defined in crate `std` (which `byteorder` depends on)

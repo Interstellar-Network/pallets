@@ -5,20 +5,19 @@ use frame_support::{
     assert_ok, parameter_types,
     traits::{ConstU16, ConstU32, ConstU64},
 };
+use serde_json::json;
 use sp_core::{
     offchain::{testing, OffchainWorkerExt, TransactionPoolExt},
     sr25519::Signature,
     H256,
 };
-use std::sync::Arc;
-
-use serde_json::json;
 use sp_keystore::{testing::KeyStore, KeystoreExt, SyncCryptoStore};
 use sp_runtime::{
     testing::{Header, TestXt},
     traits::{BlakeTwo256, Extrinsic as ExtrinsicT, IdentifyAccount, IdentityLookup, Verify},
     RuntimeAppPublic,
 };
+use std::sync::Arc;
 use tests_common::foreign_ipfs::ForeignNode;
 
 type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
@@ -111,20 +110,21 @@ impl pallet_ocw_garble::Config for Test {
 
 // Build genesis storage according to the mock runtime.
 pub fn new_test_ext() -> (sp_io::TestExternalities, ForeignNode) {
-    std::env::set_var(
-        "INTERSTELLAR_URI_NODE",
-        "http://PLACEHOLDER_INTERSTELLAR_URI_NODE_fn_new_test_ext",
-    );
+    std::env::set_var("INTERSTELLAR_URI_NODE", "http://127.0.0.1:4242");
 
     let (offchain, state) = testing::TestOffchainExt::new();
     let mut t = sp_io::TestExternalities::default();
     t.register_extension(OffchainWorkerExt::new(offchain));
 
-    get_ocw_circuits_storage_value_response(&mut state.write());
-    mock_ipfs_cat_response(&mut state.write());
-
     // NOTE: PORT hardcoded in lib.rs so we can use a dynamic one
-    let foreign_node = ForeignNode::new(Some("5001"));
+    let foreign_node = ForeignNode::new(None);
+    std::env::set_var(
+        "IPFS_ROOT_URL",
+        format!("http://127.0.0.1:{}", foreign_node.api_port),
+    );
+
+    get_ocw_circuits_storage_value_response(&mut state.write());
+    mock_ipfs_cat_response(&mut state.write(), foreign_node.api_port);
 
     (t, foreign_node)
 
@@ -164,7 +164,7 @@ fn get_ocw_circuits_storage_value_response(state: &mut testing::OffchainState) {
 
     state.expect_request(testing::PendingRequest {
         method: "POST".into(),
-        uri: "http://PLACEHOLDER_INTERSTELLAR_URI_NODE_fn_new_test_ext".into(),
+        uri: "http://127.0.0.1:4242".into(),
         // cf "fn decode_rpc_json" for the expected format
         response: Some(br#"{"id": "1", "jsonrpc": "2.0", "result": "0xb8516d626945354373524d4a7565316b5455784d5a5162694e394a794e5075384842675a346138726a6d344353776602000000b8516d5a7870436964427066624c74675534796434574a314d7654436e5539316e7867394132446137735a7069636d0a000000"}"#.to_vec()),
         sent: true,
@@ -175,25 +175,20 @@ fn get_ocw_circuits_storage_value_response(state: &mut testing::OffchainState) {
     });
 }
 
-fn mock_ipfs_cat_response(state: &mut testing::OffchainState) {
-    let body_json = json!({
-        "jsonrpc": "2.0",
-        "id": "1",
-        "method":"state_getStorage",
-        // TODO compute this dynamically
-        "params": ["0x2c644167ae9423d1f0683de9002940b8bd009489ffa75ba4c0b3f4f6fed7414b"]
-    });
-    let body_vec = serde_json::to_vec(&body_json).unwrap();
-
+fn mock_ipfs_cat_response(state: &mut testing::OffchainState, api_port: u16) {
     state.expect_request(testing::PendingRequest {
         method: "POST".into(),
-        uri: "http://127.0.0.1:5001/api/v0/cat?arg=QmbiE5CsRMJue1kTUxMZQbiN9JyNPu8HBgZ4a8rjm4CSwf".into(),
+        uri: format!(
+            "http://127.0.0.1:{}/api/v0/cat?arg=QmbiE5CsRMJue1kTUxMZQbiN9JyNPu8HBgZ4a8rjm4CSwf",
+            api_port
+        ),
         // cf "fn decode_rpc_json" for the expected format
-        response: Some(br#"{"id": "1", "jsonrpc": "2.0", "result": "0xb8516d626945354373524d4a7565316b5455784d5a5162694e394a794e5075384842675a346138726a6d344353776602000000b8516d5a7870436964427066624c74675534796434574a314d7654436e5539316e7867394132446137735a7069636d0a000000"}"#.to_vec()),
+        response: Some(
+            include_bytes!("../tests/data/display_message_120x52_2digits.skcd.pb.bin").to_vec(),
+        ),
         sent: true,
-        headers: vec![("Content-Type".into(), "application/json;charset=utf-8".into())],
-        body: body_vec,
-        response_headers: vec![("content-type".into(), "application/json; charset=utf-8".into())],
+        headers: vec![],
+        response_headers: vec![("content-type".into(), "text/plain".into())],
         ..Default::default()
     });
 }
