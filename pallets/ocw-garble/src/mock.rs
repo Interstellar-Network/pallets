@@ -18,7 +18,7 @@ use sp_runtime::{
     RuntimeAppPublic,
 };
 use std::sync::Arc;
-use tests_utils::foreign_ipfs::ForeignNode;
+use tests_utils::foreign_ipfs;
 
 type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
 type Block = frame_system::mocking::MockBlock<Test>;
@@ -120,7 +120,7 @@ impl pallet_ocw_garble::Config for Test {
 }
 
 // Build genesis storage according to the mock runtime.
-pub fn new_test_ext() -> (sp_io::TestExternalities, ForeignNode) {
+pub fn new_test_ext() -> (sp_io::TestExternalities, foreign_ipfs::ForeignNode) {
     std::env::set_var("INTERSTELLAR_URI_NODE", "http://127.0.0.1:4242");
 
     let (offchain, state) = testing::TestOffchainExt::new();
@@ -128,7 +128,7 @@ pub fn new_test_ext() -> (sp_io::TestExternalities, ForeignNode) {
     t.register_extension(OffchainWorkerExt::new(offchain));
 
     // NOTE: PORT hardcoded in lib.rs so we can use a dynamic one
-    let foreign_node = ForeignNode::new(None);
+    let (foreign_node, _ipfs_reference_client) = foreign_ipfs::run_ipfs_in_background(None);
     std::env::set_var(
         "IPFS_ROOT_URL",
         format!("http://127.0.0.1:{}", foreign_node.api_port),
