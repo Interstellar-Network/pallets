@@ -6,9 +6,6 @@ mod mock;
 #[cfg(test)]
 mod tests;
 
-#[cfg(test)]
-mod tests_common;
-
 extern crate alloc;
 
 use alloc::string::String;
@@ -677,7 +674,10 @@ pub mod pallet {
 
                 // the tests need the full body bytes to mock correctly...
                 #[cfg(test)]
-                let serialized_package_for_eval = T::HookCallGrpGarbleAndStripSerializedPackageForEval::my_test_hook(serialized_package_for_eval);
+                let serialized_package_for_eval =
+                    T::HookCallGrpGarbleAndStripSerializedPackageForEval::my_test_hook(
+                        serialized_package_for_eval,
+                    );
 
                 let ipfs_add_response = ipfs_client
                     .ipfs_add(&serialized_package_for_eval)

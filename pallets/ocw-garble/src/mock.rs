@@ -18,7 +18,7 @@ use sp_runtime::{
     RuntimeAppPublic,
 };
 use std::sync::Arc;
-use tests_common::foreign_ipfs::ForeignNode;
+use tests_utils::foreign_ipfs::ForeignNode;
 
 type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
 type Block = frame_system::mocking::MockBlock<Test>;

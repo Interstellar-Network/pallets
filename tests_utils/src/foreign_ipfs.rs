@@ -16,7 +16,6 @@
 // and https://github.com/rs-ipfs/rust-ipfs/blob/master/.github/workflows/ci.yml
 
 use ipfs_api_backend_hyper::TryFromUri;
-
 use libp2p::{core::PublicKey, Multiaddr, PeerId};
 use rand::prelude::*;
 use serde::Deserialize;
@@ -25,6 +24,9 @@ use std::{
     path::PathBuf,
     process::{Child, Command, Stdio},
 };
+
+pub use ipfs_api_backend_hyper::IpfsApi;
+pub use ipfs_api_backend_hyper::IpfsClient;
 
 #[derive(Debug)]
 pub struct ForeignNode {
@@ -124,9 +126,9 @@ impl ForeignNode {
         let mut api_port = None;
         for line in str::from_utf8(&buf).unwrap().lines() {
             if line.contains("webui") {
-                let addr = line.rsplitn(2, ' ').next().unwrap();
+                let addr = line.rsplit(' ').next().unwrap();
                 let addr = addr.strip_prefix("http://").unwrap();
-                let addr: SocketAddr = addr.rsplitn(2, '/').nth(1).unwrap().parse().unwrap();
+                let addr: SocketAddr = addr.rsplit('/').nth(1).unwrap().parse().unwrap();
                 api_port = Some(addr.port());
             }
         }
@@ -213,7 +215,7 @@ pub struct ForeignNodeId {
 /// - the corresponding ipfs-api client: allows to query IPFS using the official API
 ///
 /// https://github.com/ipfs-rust/ipfs-embed/#getting-started
-pub fn run_ipfs_in_background() -> (ForeignNode, ipfs_api_backend_hyper::IpfsClient) {
+pub fn run_ipfs_in_background() -> (ForeignNode, IpfsClient) {
     // let cache_size = 10;
     // let ipfs = Ipfs::<DefaultParams>::new(Config::default()).await.unwrap();
     // ipfs.listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap());
@@ -229,7 +231,7 @@ pub fn run_ipfs_in_background() -> (ForeignNode, ipfs_api_backend_hyper::IpfsCli
 
     let ipfs_server_multiaddr = format!("/ip4/127.0.0.1/tcp/{}", foreign_node.api_port);
     let ipfs_client =
-        ipfs_api_backend_hyper::IpfsClient::from_multiaddr_str(&ipfs_server_multiaddr).unwrap();
+        IpfsClient::from_multiaddr_str(&ipfs_server_multiaddr).unwrap();
 
     // MUST be returned and kept alive; else the daemon is killed
     (foreign_node, ipfs_client)
