@@ -107,13 +107,16 @@ pub mod pallet {
     // (callback from offchain_worker)
     #[pallet::config]
     pub trait Config:
-        frame_system::Config + CreateSignedTransaction<Call<Self>> + pallet_tx_validation::Config
+        frame_system::Config
+        + CreateSignedTransaction<Call<Self>>
+        + pallet_tx_validation::Config
+        + 'static
     // TODO? + pallet_ocw_circuits::Config
     // TODO TOREMOVE
     // + pallet_timestamp::Config
     {
         /// The overarching event type.
-        type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
+        type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
         /// The overarching dispatch call type.
         type RuntimeCall: From<Call<Self>>;
         /// The identifier type for an offchain worker.
@@ -200,9 +203,14 @@ pub mod pallet {
     // pub type DisplaySkcdPackageValueCopy<T> =
     //     StorageValue<_, pallet_ocw_circuits::DisplaySkcdPackage, ValueQuery>;
 
+    /// The current storage version.
+    const STORAGE_VERSION: frame_support::traits::StorageVersion =
+        frame_support::traits::StorageVersion::new(1);
+
     #[pallet::pallet]
     #[pallet::generate_store(pub(super) trait Store)]
-    pub struct Pallet<T>(_);
+    #[pallet::storage_version(STORAGE_VERSION)]
+    pub struct Pallet<T>(PhantomData<T>);
 
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
@@ -448,6 +456,7 @@ pub mod pallet {
         }
         */
 
+        #[pallet::call_index(0)]
         #[pallet::weight(10000)]
         pub fn garble_and_strip_display_circuits_package_signed(
             origin: OriginFor<T>,
@@ -571,6 +580,7 @@ pub mod pallet {
         /// Not meant to be called by a user
         // TODO use "with signed payload" and check if expected key?
         // TODO TOREMOVE
+        #[pallet::call_index(1)]
         #[pallet::weight(10000)]
         pub fn callback_new_garbled_signed(
             origin: OriginFor<T>,

@@ -15,9 +15,9 @@ fn test_submit_config_display_circuits_package_signed() {
 
         // Dispatch a signed extrinsic.
         assert_ok!(
-            PalletOcwCircuits::submit_config_display_circuits_package_signed(Origin::signed(
-                account_id
-            ),)
+            PalletOcwCircuits::submit_config_display_circuits_package_signed(
+                RuntimeOrigin::signed(account_id),
+            )
         );
         // TODO how to CHECK "append_or_replace_verilog_hash"
         // System::assert_last_event(crate::Event::NewMobileRegistered { account_id: 1 }.into());

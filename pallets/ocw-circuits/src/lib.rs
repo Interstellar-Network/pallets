@@ -111,9 +111,9 @@ pub mod pallet {
     }
 
     #[pallet::config]
-    pub trait Config: frame_system::Config + CreateSignedTransaction<Call<Self>> {
+    pub trait Config: frame_system::Config + CreateSignedTransaction<Call<Self>> + 'static {
         /// The overarching event type.
-        type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
+        type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
         /// The overarching dispatch call type.
         type RuntimeCall: From<Call<Self>>;
         /// A dispatchable call.
@@ -153,9 +153,14 @@ pub mod pallet {
     pub(super) type DisplaySkcdPackageValue<T: Config> =
         StorageValue<_, DisplaySkcdPackage, ValueQuery>;
 
+    /// The current storage version.
+    const STORAGE_VERSION: frame_support::traits::StorageVersion =
+        frame_support::traits::StorageVersion::new(1);
+
     #[pallet::pallet]
     #[pallet::generate_store(pub(super) trait Store)]
-    pub struct Pallet<T>(_);
+    #[pallet::storage_version(STORAGE_VERSION)]
+    pub struct Pallet<T>(PhantomData<T>);
 
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
@@ -250,6 +255,7 @@ pub mod pallet {
 
     #[pallet::call]
     impl<T: Config> Pallet<T> {
+        #[pallet::call_index(0)]
         #[pallet::weight(10000)]
         pub fn submit_config_generic_signed(
             origin: OriginFor<T>,
@@ -267,6 +273,7 @@ pub mod pallet {
             Ok(())
         }
 
+        #[pallet::call_index(1)]
         #[pallet::weight(10000)]
         pub fn submit_config_display_circuits_package_signed(
             origin: OriginFor<T>,
@@ -285,6 +292,7 @@ pub mod pallet {
         /// Called at the end of offchain_worker to publish the result
         /// Not meant to be called by a user
         // TODO use "with signed payload" and check if expected key?
+        #[pallet::call_index(2)]
         #[pallet::weight(10000)]
         pub fn callback_new_skcd_signed(origin: OriginFor<T>, skcd_cid: Vec<u8>) -> DispatchResult {
             let who = ensure_signed(origin)?;
@@ -298,6 +306,7 @@ pub mod pallet {
             Ok(())
         }
 
+        #[pallet::call_index(3)]
         #[pallet::weight(10000)]
         pub fn callback_new_display_circuits_package_signed(
             origin: OriginFor<T>,

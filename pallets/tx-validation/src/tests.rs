@@ -13,7 +13,7 @@ fn store_metadata_ok() {
         let message_digits = vec![3, 4];
         let pinpad_digits = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
         assert_ok!(TxValidation::store_metadata(
-            Origin::signed(account_id),
+            RuntimeOrigin::signed(account_id),
             ipfs_cid.clone(),
             message_digits.clone(),
             pinpad_digits.clone(),
@@ -37,7 +37,7 @@ fn test_check_input_ok(inputs: Vec<u8>) {
         let account_id = 1;
         let ipfs_cid = vec![1, 2];
         assert_ok!(TxValidation::store_metadata(
-            Origin::signed(account_id),
+            RuntimeOrigin::signed(account_id),
             ipfs_cid.clone(),
             // store_metadata is raw, as-is(no ascii conv)
             vec![3, 4],
@@ -46,7 +46,7 @@ fn test_check_input_ok(inputs: Vec<u8>) {
 
         // Dispatch a signed extrinsic.
         assert_ok!(TxValidation::check_input(
-            Origin::signed(account_id),
+            RuntimeOrigin::signed(account_id),
             ipfs_cid.clone(),
             inputs
         ));
@@ -71,7 +71,7 @@ fn check_input_wrong_code_tx_fail() {
         let account_id = 1;
         let ipfs_cid = vec![1, 2];
         assert_ok!(TxValidation::store_metadata(
-            Origin::signed(account_id),
+            RuntimeOrigin::signed(account_id),
             ipfs_cid.clone(),
             // store_metadata is raw, as-is(no ascii conv)
             vec![3, 4],
@@ -81,7 +81,7 @@ fn check_input_wrong_code_tx_fail() {
         // Dispatch a signed extrinsic.
         // Ensure the expected error is thrown if a wrong input is given
         let result = TxValidation::check_input(
-            Origin::signed(account_id),
+            RuntimeOrigin::signed(account_id),
             ipfs_cid.clone(),
             vec!['0' as u8, '0' as u8],
         );
@@ -105,7 +105,7 @@ fn check_input_too_long_fail_graciously() {
         let account_id = 1;
         let ipfs_cid = vec![1, 2];
         assert_ok!(TxValidation::store_metadata(
-            Origin::signed(account_id),
+            RuntimeOrigin::signed(account_id),
             ipfs_cid.clone(),
             // store_metadata is raw, as-is(no ascii conv)
             vec![3, 4],
@@ -115,7 +115,7 @@ fn check_input_too_long_fail_graciously() {
         // Dispatch a signed extrinsic.
         // Ensure the expected error is thrown if a wrong input is given
         let result = TxValidation::check_input(
-            Origin::signed(account_id),
+            RuntimeOrigin::signed(account_id),
             ipfs_cid.clone(),
             vec![0, 0, 0, 0],
         );
@@ -136,7 +136,7 @@ fn check_input_invalid_fail_graciously() {
         let account_id = 1;
         let ipfs_cid = vec![1, 2];
         assert_ok!(TxValidation::store_metadata(
-            Origin::signed(account_id),
+            RuntimeOrigin::signed(account_id),
             ipfs_cid.clone(),
             // store_metadata is raw, as-is(no ascii conv)
             vec![3, 4],
@@ -146,7 +146,7 @@ fn check_input_invalid_fail_graciously() {
         // Dispatch a signed extrinsic.
         // Ensure the expected error is thrown if a wrong input is given
         let result = TxValidation::check_input(
-            Origin::signed(account_id),
+            RuntimeOrigin::signed(account_id),
             ipfs_cid.clone(),
             vec!['^' as u8],
         );

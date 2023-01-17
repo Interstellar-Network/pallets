@@ -17,7 +17,7 @@ fn test_garble_and_strip_display_circuits_package_signed() {
         // Dispatch a signed extrinsic.
         assert_ok!(
             PalletOcwGarble::garble_and_strip_display_circuits_package_signed(
-                Origin::signed(account_id,),
+                RuntimeOrigin::signed(account_id,),
                 vec![42],
             )
         );

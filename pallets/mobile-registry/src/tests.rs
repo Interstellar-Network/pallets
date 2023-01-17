@@ -9,7 +9,7 @@ fn test_register_mobile_ok(pub_key: Vec<u8>) {
 
         // Dispatch a signed extrinsic.
         assert_ok!(MobileRegistry::register_mobile(
-            Origin::signed(account_id),
+            RuntimeOrigin::signed(account_id),
             pub_key
         ));
         System::assert_last_event(crate::Event::NewMobileRegistered { account_id: 1 }.into());
@@ -41,7 +41,7 @@ fn test_register_mobile_pub_key_too_small_err() {
         // Dispatch a signed extrinsic.
         // Ensure the expected error is thrown if a wrong input is given
         assert_noop!(
-            MobileRegistry::register_mobile(Origin::signed(account_id), vec![0, 1]),
+            MobileRegistry::register_mobile(RuntimeOrigin::signed(account_id), vec![0, 1]),
             Error::<Test>::InvalidKeySize
         );
     });

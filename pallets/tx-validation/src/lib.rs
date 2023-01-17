@@ -23,8 +23,8 @@ pub mod pallet {
     /// Configure the pallet by specifying the parameters and types on which it depends.
     #[pallet::config]
     pub trait Config: frame_system::Config + 'static {
-        /// Because this pallet emits events, it depends on the runtime's definition of an event.
-        type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
+        /// The overarching event type.
+        type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
     }
 
     // TODO proper structs instead of tuples for the StorageMap(both key and value)
@@ -126,9 +126,14 @@ pub mod pallet {
         // ValueQuery,
     >;
 
+    /// The current storage version.
+    const STORAGE_VERSION: frame_support::traits::StorageVersion =
+        frame_support::traits::StorageVersion::new(1);
+
     #[pallet::pallet]
     #[pallet::generate_store(pub(super) trait Store)]
-    pub struct Pallet<T>(_);
+    #[pallet::storage_version(STORAGE_VERSION)]
+    pub struct Pallet<T>(PhantomData<T>);
 
     // Pallets use events to inform users when important changes are made.
     // https://docs.substrate.io/v3/runtime/events-and-errors
@@ -214,7 +219,8 @@ pub mod pallet {
     impl<T: Config> Pallet<T> {
         // TODO remove call? how to properly handle calling store_metadata_aux from pallet-ocw-garble???
         // NOTE: this is needed only for tests...
-        #[pallet::weight(10_000 + T::DbWeight::get().writes(1))]
+        #[pallet::call_index(0)]
+        #[pallet::weight(10_000)] // TODO + T::DbWeight::get().writes(1)
         pub fn store_metadata(
             origin: OriginFor<T>,
             message_pgarbled_cid: Vec<u8>,
@@ -231,7 +237,8 @@ pub mod pallet {
 
         // NOTE: for now this extrinsic is called from the front-end so input_digits is ascii
         // ie when giving "35" in the text box, we get [51,53]
-        #[pallet::weight(10_000 + T::DbWeight::get().writes(1))]
+        #[pallet::call_index(1)]
+        #[pallet::weight(10_000)] // TODO + T::DbWeight::get().writes(1)
         pub fn check_input(
             origin: OriginFor<T>,
             ipfs_cid: Vec<u8>,
