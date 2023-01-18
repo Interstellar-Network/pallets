@@ -41,7 +41,7 @@ ipfs-client-http-req = { git = "https://github.com/Interstellar-Network/lib-garb
 # quick-protobuf = { version = "0.8.0", default-features = false }
 # quick-protobuf = "0.8.0"
 
-codec = { package = "parity-scale-codec", version = "^3.1", default-features = false, features = [
+codec = { package = "parity-scale-codec", version = "3", default-features = false, features = [
 	"derive",
 ] }
 scale-info = { version = "2", default-features = false, features = ["derive"] }

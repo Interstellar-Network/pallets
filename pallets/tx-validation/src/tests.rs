@@ -111,6 +111,7 @@ fn check_input_too_long_fail_graciously() {
             vec![3, 4],
             vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
         ));
+        System::reset_events();
 
         // Dispatch a signed extrinsic.
         // Ensure the expected error is thrown if a wrong input is given
