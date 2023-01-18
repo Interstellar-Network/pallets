@@ -32,7 +32,14 @@ fn store_metadata_ok() {
     });
 }
 
-fn test_check_input_ok(inputs: Vec<u8>) {
+/// When expecting 2 digits, giving eg 4 inputs SHOULD graciously fail
+/// It MUST fail with the standard "tx fail" error(ie TxWrongInputGiven) to avoid leaking the expected input length
+/// NOTE: the expected input length is indeed present on the client side, but it is NOT leaked from this pallet.
+/// It comes from pallet_ocw_garble.
+///
+/// NOTE: this DOES NOT return an Err; that way the tx IS NOT rollbacked
+/// and the user CAN NOT retry
+fn test_check_input_ok(inputs: Vec<u8>, should_be_ok: bool) {
     new_test_ext().execute_with(|| {
         let account_id = 1;
         let ipfs_cid = vec![1, 2];
@@ -50,89 +57,41 @@ fn test_check_input_ok(inputs: Vec<u8>) {
             ipfs_cid.clone(),
             inputs
         ));
-        System::assert_last_event(crate::Event::TxPass { account_id: 1 }.into());
+        if should_be_ok {
+            System::assert_last_event(crate::Event::TxPass { account_id }.into());
+        } else {
+            System::assert_last_event(crate::Event::TxFail { account_id }.into());
+            // TODO in this case we SHOULD not allow the user to retry; ie cleanup Storage etc
+        }
     });
 }
 
 /// check_input SHOULD work with ASCII(useful for testing with a front-end)
 #[test]
 fn check_input_good_ascii_ok() {
-    test_check_input_ok(vec!['6' as u8, '0' as u8])
+    test_check_input_ok(vec!['6' as u8, '0' as u8], true)
 }
 
 #[test]
 fn check_input_good_u8_ok() {
-    test_check_input_ok(vec![6, 0])
+    test_check_input_ok(vec![6, 0], true)
 }
 
 #[test]
-fn check_input_wrong_code_tx_fail() {
-    new_test_ext().execute_with(|| {
-        let account_id = 1;
-        let ipfs_cid = vec![1, 2];
-        assert_ok!(TxValidation::store_metadata(
-            RuntimeOrigin::signed(account_id),
-            ipfs_cid.clone(),
-            // store_metadata is raw, as-is(no ascii conv)
-            vec![3, 4],
-            vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
-        ));
-
-        // Dispatch a signed extrinsic.
-        // Ensure the expected error is thrown if a wrong input is given
-        let result = TxValidation::check_input(
-            RuntimeOrigin::signed(account_id),
-            ipfs_cid.clone(),
-            vec!['0' as u8, '0' as u8],
-        );
-        System::assert_last_event(crate::Event::TxFail { account_id: 1 }.into());
-        assert_err!(result, Error::<Test>::TxWrongCodeGiven);
-        // TODO? should this be a noop?
-        // assert_noop!(
-        //     TxValidation::check_input(Origin::signed(account_id), ipfs_cid.clone(), vec![0, 0]),
-        //     Error::<Test>::TxWrongInputGiven
-        // );
-    });
+fn check_input_wrong_code_fail() {
+    test_check_input_ok(vec!['0' as u8, '0' as u8], false)
 }
 
-/// When expecting 2 digits, giving eg 4 inputs SHOULD graciously fail
-/// It MUST fail with the standard "tx fail" error(ie TxWrongInputGiven) to avoid leaking the expected input length
-/// NOTE: the expected input length is indeed present on the client side, but it is NOT leaked from this pallet.
-/// It comes from pallet_ocw_garble.
 #[test]
-fn check_input_too_long_fail_graciously() {
-    new_test_ext().execute_with(|| {
-        let account_id = 1;
-        let ipfs_cid = vec![1, 2];
-        assert_ok!(TxValidation::store_metadata(
-            RuntimeOrigin::signed(account_id),
-            ipfs_cid.clone(),
-            // store_metadata is raw, as-is(no ascii conv)
-            vec![3, 4],
-            vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
-        ));
-        System::reset_events();
-
-        // Dispatch a signed extrinsic.
-        // Ensure the expected error is thrown if a wrong input is given
-        let result = TxValidation::check_input(
-            RuntimeOrigin::signed(account_id),
-            ipfs_cid.clone(),
-            vec![0, 0, 0, 0],
-        );
-        System::assert_last_event(crate::Event::TxFail { account_id: 1 }.into());
-        assert_err!(result, Error::<Test>::TxWrongCodeGiven);
-        // TODO? should this be a noop?
-        // assert_noop!(
-        //     TxValidation::check_input(Origin::signed(account_id), ipfs_cid.clone(), vec![0, 0]),
-        //     Error::<Test>::TxWrongInputGiven
-        // );
-    });
+fn check_input_wrong_size_fail() {
+    test_check_input_ok(vec![0, 0, 0, 0], false)
 }
 
 /// Giving inputs outside '0'-'9' or 0-9 SHOULD fail graciously(ie no panic!)
+/// in this case contrary to "check_input_wrong_size_fail_graciously" we return an Err
+/// which rollbacks the transaction. This allows the user to retry.
 #[test]
-fn check_input_invalid_fail_graciously() {
+fn check_input_invalid_fail_err() {
     new_test_ext().execute_with(|| {
         let account_id = 1;
         let ipfs_cid = vec![1, 2];

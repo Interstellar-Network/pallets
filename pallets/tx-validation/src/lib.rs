@@ -160,8 +160,6 @@ pub mod pallet {
     pub enum Error<T> {
         // The given ipfs_cid was NOT present in CircuitServerMetadataMap
         CircuitNotFound,
-        // wrong OTP/permutation given -> Transaction failed
-        TxWrongCodeGiven,
         // inputs SHOULD be [0;9] or ['0';'9']
         // and inputs length MUST match expected length
         TxInvalidInputsGiven,
@@ -306,14 +304,19 @@ pub mod pallet {
             // TODO remove the key from the map; we DO NOT want to allow retrying
             if display_validation_package.message_digits == computed_inputs_from_permutation {
                 log::info!("[tx-validation] TxPass",);
-                Self::deposit_event(Event::TxPass { account_id: who });
+                crate::Pallet::<T>::deposit_event(Event::TxPass { account_id: who });
                 // TODO on success: call next step/callback (ie pallet-tx-XXX)
-                Ok(())
             } else {
                 log::info!("[tx-validation] TxFail",);
-                Self::deposit_event(Event::TxFail { account_id: who });
-                Err(Error::<T>::TxWrongCodeGiven.into())
+                crate::Pallet::<T>::deposit_event(Event::TxFail { account_id: who });
+                // DO NOT return an Err; that would rollback the tx and allow the user to retry
+                // this is NOT what we want!
+                // We only want to retry if the input are invalid(eg not in [0-9]) NOT if a wrong code is given
+                //
+                // TODO in this case we SHOULD NOT allow the user to retry; ie cleanup Storage etc
             }
+
+            Ok(())
         }
     }
 }
