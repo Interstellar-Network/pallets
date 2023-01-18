@@ -1,22 +1,14 @@
 use crate as pallet_ocw_circuits;
 use crate::*;
-use codec::Decode;
 use frame_support::{
-    assert_ok, parameter_types,
-    traits::{ConstU16, ConstU32, ConstU64},
+    parameter_types,
+    traits::{ConstU32, ConstU64},
 };
-use sp_core::{
-    offchain::{testing, OffchainWorkerExt, TransactionPoolExt},
-    sr25519::Signature,
-    H256,
-};
-use std::sync::Arc;
+use sp_core::{sr25519::Signature, H256};
 
-use sp_keystore::{testing::KeyStore, KeystoreExt, SyncCryptoStore};
 use sp_runtime::{
     testing::{Header, TestXt},
     traits::{BlakeTwo256, Extrinsic as ExtrinsicT, IdentifyAccount, IdentityLookup, Verify},
-    RuntimeAppPublic,
 };
 
 type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;

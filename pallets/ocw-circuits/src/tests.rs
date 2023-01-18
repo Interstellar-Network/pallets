@@ -1,8 +1,6 @@
 /// https://github.com/paritytech/substrate/blob/monthly-2022-10/frame/examples/offchain-worker/src/tests.rs
-use crate::{mock::*, Error};
+use crate::mock::*;
 use frame_support::assert_ok;
-use frame_support::pallet_prelude::ConstU32;
-use frame_support::{assert_err, assert_noop, BoundedVec};
 use test_log::test;
 
 fn test_pub() -> sp_core::sr25519::Public {

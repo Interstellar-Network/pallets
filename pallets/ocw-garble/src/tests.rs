@@ -1,8 +1,6 @@
 /// https://github.com/paritytech/substrate/blob/monthly-2022-10/frame/examples/offchain-worker/src/tests.rs
-use crate::{mock::*, Error};
+use crate::mock::*;
 use frame_support::assert_ok;
-use frame_support::pallet_prelude::ConstU32;
-use frame_support::{assert_err, assert_noop, BoundedVec};
 use test_log::test;
 
 fn test_pub() -> sp_core::sr25519::Public {
@@ -10,7 +8,7 @@ fn test_pub() -> sp_core::sr25519::Public {
 }
 
 fn test_garble_and_strip_display_circuits_package_signed() {
-    let (mut t, foreign_node) = new_test_ext();
+    let (mut t, _foreign_node) = new_test_ext();
     t.execute_with(|| {
         let account_id = test_pub();
 

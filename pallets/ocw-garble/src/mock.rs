@@ -1,23 +1,19 @@
 use crate as pallet_ocw_garble;
 use crate::*;
-use codec::Decode;
 use frame_support::{
-    assert_ok, parameter_types,
-    traits::{ConstU16, ConstU32, ConstU64},
+    parameter_types,
+    traits::{ConstU32, ConstU64},
 };
 use serde_json::json;
 use sp_core::{
-    offchain::{testing, OffchainWorkerExt, TransactionPoolExt},
+    offchain::{testing, OffchainWorkerExt},
     sr25519::Signature,
     H256,
 };
-use sp_keystore::{testing::KeyStore, KeystoreExt, SyncCryptoStore};
 use sp_runtime::{
     testing::{Header, TestXt},
     traits::{BlakeTwo256, Extrinsic as ExtrinsicT, IdentifyAccount, IdentityLookup, Verify},
-    RuntimeAppPublic,
 };
-use std::sync::Arc;
 use tests_utils::foreign_ipfs;
 
 type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
@@ -106,7 +102,7 @@ const OVERWRITTEN_SERIALIZED_IPFS_ADD: &[u8] = &[42, 42];
 
 pub struct MyTestCallbackMock;
 impl MyTestCallback for MyTestCallbackMock {
-    fn my_test_hook(input: Vec<u8>) -> Vec<u8> {
+    fn my_test_hook(_input: Vec<u8>) -> Vec<u8> {
         // MUST match mock_ipfs_add_response
         OVERWRITTEN_SERIALIZED_IPFS_ADD.to_vec()
     }

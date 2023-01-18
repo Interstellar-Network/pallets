@@ -1,6 +1,5 @@
 use crate::{mock::*, Error};
-use frame_support::assert_ok;
-use frame_support::{assert_err, assert_noop, BoundedVec};
+use frame_support::{assert_noop, assert_ok};
 use test_log::test;
 
 fn test_register_mobile_ok(pub_key: Vec<u8>) {

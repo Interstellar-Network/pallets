@@ -104,7 +104,7 @@ pub mod pallet {
         // "append if exists, create if not"
         // TODO done in two steps, is there a way to do it atomically?
         let mut current_tx_history: TxResultsType =
-            <TxResultsMap<T>>::try_get(&who).unwrap_or_default();
+            <TxResultsMap<T>>::try_get(who).unwrap_or_default();
         current_tx_history
             .try_push(TxResultPackage {
                 message_pgarbled_cid: TryInto::<BoundedVec<u8, ConstU32<64>>>::try_into(
@@ -118,7 +118,7 @@ pub mod pallet {
 
         log::info!(
             "[tx-registry] store_tx_result: done! [{:?}]",
-            <TxResultsMap<T>>::try_get(&who).unwrap_or_default()
+            <TxResultsMap<T>>::try_get(who).unwrap_or_default()
         );
 
         Ok(())
