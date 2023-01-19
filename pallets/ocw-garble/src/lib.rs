@@ -298,24 +298,29 @@ pub mod pallet {
                 "id": "1",
                 "method":"state_getStorage",
                 // TODO compute this dynamically
+                // You can get it using eg https://polkadot.js.org/apps/#/chainstate;
+                // then select "ocwCircuits" and then the correct storage entry.
                 "params": ["0x2c644167ae9423d1f0683de9002940b8bd009489ffa75ba4c0b3f4f6fed7414b"]
             });
 
             let endpoint = get_node_uri();
 
-            let (resp_bytes, resp_content_type) =
-                ocw_common::sp_offchain_fetch_from_remote_grpc_web(
-                    Some(bytes::Bytes::from(serde_json::to_vec(&body_json).unwrap())),
-                    &endpoint,
-                    ocw_common::RequestMethod::Post,
-                    Some(ocw_common::ContentType::Json),
-                    core::time::Duration::from_millis(2_000),
-                )
-                .map_err(|e| {
-                    log::error!("[ocw-garble] call_grpc_garble error: {:?}", e);
-                    <Error<T>>::HttpFetchingError
-                })
-                .unwrap();
+            let (resp_bytes, resp_content_type) = ocw_common::http_req_fetch_from_remote_grpc_web(
+                Some(bytes::Bytes::from(serde_json::to_vec(&body_json).unwrap())),
+                &endpoint,
+                ocw_common::RequestMethod::Post,
+                Some(ocw_common::ContentType::Json),
+                core::time::Duration::from_millis(2_000),
+            )
+            .map_err(|e| {
+                log::error!(
+                    "[ocw-garble] call_grpc_garble error: {:?} [{:?}]",
+                    e,
+                    endpoint
+                );
+                <Error<T>>::HttpFetchingError
+            })
+            .unwrap();
 
             let response: DisplaySkcdPackageCopy =
                 ocw_common::decode_rpc_json(resp_bytes, resp_content_type);

@@ -23,7 +23,7 @@ prost = { version = "0.11", default-features = false, features = ["prost-derive"
 # "Only necessary if using Protobuf well-known types:"
 prost-types = { version = "0.11", default-features = false }
 
-ocw-common = { path = "../../ocw-common", default-features = false, features = ["sp_offchain"] }
+ocw-common = { path = "../../ocw-common", default-features = false }
 
 # prost: could not find a way to use encode() in no_std context...
 # = note: the lang item is first defined in crate `std` (which `byteorder` depends on)
@@ -61,6 +61,7 @@ std = [
 	"log/std",
 	"sp-keystore/std",
 	"ocw-common/std",
+	"ocw-common/with_sp_offchain"
 ]
 runtime-benchmarks = ["frame-benchmarking/runtime-benchmarks"]
 try-runtime = ["frame-support/try-runtime"]

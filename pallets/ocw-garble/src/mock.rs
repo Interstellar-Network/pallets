@@ -4,6 +4,7 @@ use frame_support::{
     parameter_types,
     traits::{ConstU32, ConstU64},
 };
+use httpmock::prelude::*;
 use serde_json::json;
 use sp_core::{
     offchain::{testing, OffchainWorkerExt},
@@ -117,7 +118,10 @@ impl pallet_ocw_garble::Config for Test {
 
 // Build genesis storage according to the mock runtime.
 pub fn new_test_ext() -> (sp_io::TestExternalities, foreign_ipfs::ForeignNode) {
-    std::env::set_var("INTERSTELLAR_URI_NODE", "http://127.0.0.1:4242");
+    // MOCK "integritee-node" RPC
+    let mock_server_uri_node = MockServer::start();
+
+    std::env::set_var("INTERSTELLAR_URI_NODE", mock_server_uri_node.base_url());
 
     let (offchain, state) = testing::TestOffchainExt::new();
     let mut t = sp_io::TestExternalities::default();
@@ -130,43 +134,9 @@ pub fn new_test_ext() -> (sp_io::TestExternalities, foreign_ipfs::ForeignNode) {
         format!("http://127.0.0.1:{}", foreign_node.api_port),
     );
 
-    // WARNING: order matters!
-    get_ocw_circuits_storage_value_response(&mut state.write());
-    // The IPFS cids MUST match the encoded values in "get_ocw_circuits_storage_value_response"
-    mock_ipfs_cat_response(
-        &mut state.write(),
-        foreign_node.api_port,
-        "QmbiE5CsRMJue1kTUxMZQbiN9JyNPu8HBgZ4a8rjm4CSwf",
-        include_bytes!("../tests/data/display_message_120x52_2digits.skcd.pb.bin"),
-    );
-    mock_ipfs_add_response(&mut state.write(), foreign_node.api_port);
-    mock_ipfs_cat_response(
-        &mut state.write(),
-        foreign_node.api_port,
-        "QmZxpCidBpfbLtgU4yd4WJ1MvTCnU91nxg9A2Da7sZpicm",
-        include_bytes!("../tests/data/display_pinpad_590x50.skcd.pb.bin"),
-    );
-    mock_ipfs_add_response(&mut state.write(), foreign_node.api_port);
+    mock_ocw_circuits_storage_value_response(&mock_server_uri_node);
 
     (t, foreign_node)
-
-    // // system::GenesisConfig::default()
-    // //     .build_storage::<Test>()
-    // //     .unwrap()
-    // //     .into()
-
-    // let t = frame_system::GenesisConfig::default()
-    //     .build_storage::<Test>()
-    //     .unwrap();
-    // // pallet_mobile_registry::GenesisConfig::<Test> {
-    // //     balances: vec![(1, 10), (2, 10), (3, 10), (4, 10), (5, 2)],
-    // // }
-    // // .assimilate_storage(&mut t)
-    // // .unwrap();
-
-    // let mut ext = sp_io::TestExternalities::new(t);
-    // ext.execute_with(|| System::set_block_number(1));
-    // ext
 }
 
 /// For now b/c https://github.com/integritee-network/worker/issues/976
@@ -174,7 +144,7 @@ pub fn new_test_ext() -> (sp_io::TestExternalities, foreign_ipfs::ForeignNode) {
 /// cf "fn get_ocw_circuits_storage_value"
 ///
 /// based on https://github.com/paritytech/substrate/blob/e9b0facf70eeb08032cc7e83548c62f0b4a24bb1/frame/examples/offchain-worker/src/tests.rs#L385
-fn get_ocw_circuits_storage_value_response(state: &mut testing::OffchainState) {
+fn mock_ocw_circuits_storage_value_response(server: &MockServer) {
     let body_json = json!({
         "jsonrpc": "2.0",
         "id": "1",
@@ -182,67 +152,18 @@ fn get_ocw_circuits_storage_value_response(state: &mut testing::OffchainState) {
         // TODO compute this dynamically
         "params": ["0x2c644167ae9423d1f0683de9002940b8bd009489ffa75ba4c0b3f4f6fed7414b"]
     });
-    let body_vec = serde_json::to_vec(&body_json).unwrap();
+    let body = serde_json::to_string(&body_json).unwrap();
 
-    state.expect_request(testing::PendingRequest {
-        method: "POST".into(),
-        uri: "http://127.0.0.1:4242".into(),
-        // cf "fn decode_rpc_json" for the expected format
-        // MUST match the param passed to "mock_ipfs_cat_response"
-        response: Some(br#"{"id": "1", "jsonrpc": "2.0", "result": "0xb8516d626945354373524d4a7565316b5455784d5a5162694e394a794e5075384842675a346138726a6d344353776602000000b8516d5a7870436964427066624c74675534796434574a314d7654436e5539316e7867394132446137735a7069636d0a000000"}"#.to_vec()),
-        sent: true,
-        headers: vec![("Content-Type".into(), "application/json;charset=utf-8".into())],
-        body: body_vec,
-        response_headers: vec![("content-type".into(), "application/json; charset=utf-8".into())],
-        ..Default::default()
-    });
-}
-
-fn mock_ipfs_cat_response(
-    state: &mut testing::OffchainState,
-    api_port: u16,
-    ipfs_cid: &str,
-    file_bytes: &[u8],
-) {
-    state.expect_request(testing::PendingRequest {
-        method: "POST".into(),
-        uri: format!("http://127.0.0.1:{}/api/v0/cat?arg={}", api_port, ipfs_cid),
-        // cf "fn decode_rpc_json" for the expected format
-        response: Some(file_bytes.to_vec()),
-        sent: true,
-        headers: vec![],
-        response_headers: vec![("content-type".into(), "text/plain".into())],
-        ..Default::default()
-    });
-}
-
-fn mock_ipfs_add_response(state: &mut testing::OffchainState, api_port: u16) {
-    state.expect_request(testing::PendingRequest {
-        method: "POST".into(),
-        uri: format!("http://127.0.0.1:{}/api/v0/add", api_port),
-        // cf "fn decode_rpc_json" for the expected format
-        response: Some(br#"{"Name":"TODO_path","Hash":"QmUjBgZpddDdKZkAFszLyrX2YkBLPKLmkKWJFsU1fTcJWo","Size":"36"}"#.to_vec()),
-        sent: true,
-        headers: vec![(
-            "Content-Type".into(),
-            "multipart/form-data;boundary=\"boundary\"".into(),
-        )],
-        // MUST match MyTestCallbackMock
-        // But it adds the whole "multipart" boundaries etc
-        body: vec![
-            45, 45, 98, 111, 117, 110, 100, 97, 114, 121, 13, 10, 67, 111, 110, 116, 101, 110, 116,
-            45, 68, 105, 115, 112, 111, 115, 105, 116, 105, 111, 110, 58, 32, 102, 111, 114, 109,
-            45, 100, 97, 116, 97, 59, 32, 110, 97, 109, 101, 61, 34, 102, 105, 108, 101, 34, 59,
-            32, 102, 105, 108, 101, 110, 97, 109, 101, 61, 34, 84, 79, 68, 79, 95, 112, 97, 116,
-            104, 34, 13, 10, 67, 111, 110, 116, 101, 110, 116, 45, 84, 121, 112, 101, 58, 32, 97,
-            112, 112, 108, 105, 99, 97, 116, 105, 111, 110, 47, 111, 99, 116, 101, 116, 45, 115,
-            116, 114, 101, 97, 109, 13, 10, 13, 10, //
-            // OVERWRITTEN_SERIALIZED_IPFS_ADD
-            42, 42, //
-            //
-            13, 10, 45, 45, 98, 111, 117, 110, 100, 97, 114, 121, 45, 45,
-        ],
-        response_headers: vec![("content-type".into(), "text/plain".into())],
-        ..Default::default()
+    server.mock(|when, then| {
+        when.method(POST)
+            .path("/")
+            .header("Content-Type", "application/json;charset=utf-8")
+            .body(&body)
+            ;
+        then.status(200)
+            .header("content-type", "application/json; charset=utf-8")
+            // cf "fn decode_rpc_json" for the expected format
+            // MUST match the param passed to "mock_ipfs_cat_response"
+            .body(br#"{"id": "1", "jsonrpc": "2.0", "result": "0xb8516d626945354373524d4a7565316b5455784d5a5162694e394a794e5075384842675a346138726a6d344353776602000000b8516d5a7870436964427066624c74675534796434574a314d7654436e5539316e7867394132446137735a7069636d0a000000"}"#.to_vec());
     });
 }

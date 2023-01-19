@@ -27,7 +27,7 @@ rand_chacha = { version = "0.3.1", default-features = false }
 rand = { version = "0.8.5", default-features = false }
 bytes = { version = "1", default-features = false }
 
-ocw-common = { path = "../../ocw-common", default-features = false, features = ["sp_offchain"] }
+ocw-common = { path = "../../ocw-common", default-features = false }
 pallet-tx-validation = { path = "../tx-validation", default-features = false }
 # pallet-ocw-circuits = { path = "../ocw-circuits", default-features = false }
 # TODO TOREMOVE
@@ -84,6 +84,7 @@ std = [
 	"pallet-tx-validation/std",
 	# TODO? "pallet-ocw-circuits/std",
 	"ocw-common/std",
+	"ocw-common/with_http_req_std",
 	"lib-garble-rs/std",
 	"ipfs-client-http-req/std",
 	# TEMP
@@ -94,6 +95,7 @@ std = [
 ]
 sgx = [
 	"ocw-common/sgx",
+	"ocw-common/with_http_req_sgx",
 	"lib-garble-rs/sgx",
 	"ipfs-client-http-req/sgx",
 	"sgx_tstd",
@@ -114,3 +116,4 @@ env_logger = "0.10"
 test-log = "0.2"
 
 tests-utils = { path = "../../tests_utils" }
+httpmock = "0.6"

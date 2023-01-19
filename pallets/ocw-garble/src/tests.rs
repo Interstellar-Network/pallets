@@ -8,7 +8,7 @@ fn test_pub() -> sp_core::sr25519::Public {
 }
 
 fn test_garble_and_strip_display_circuits_package_signed() {
-    let (mut t, _foreign_node) = new_test_ext();
+    let (mut t, foreign_node) = new_test_ext();
     t.execute_with(|| {
         let account_id = test_pub();
 
@@ -22,6 +22,9 @@ fn test_garble_and_strip_display_circuits_package_signed() {
         // TODO how to CHECK "append_or_replace_verilog_hash"
         // System::assert_last_event(crate::Event::NewMobileRegistered { account_id: 1 }.into());
     });
+
+    // Needed to keep the server alive?
+    assert!(foreign_node.daemon.id() > 0);
 }
 
 #[test]
