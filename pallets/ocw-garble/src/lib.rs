@@ -155,7 +155,7 @@ pub mod pallet {
 
     /// MUST match pallet_ocw_circuits::DisplaySkcdPackage
     // TODO SHOULD we use pallet_ocw_circuits::DisplaySkcdPackage? or instead move to a new common crate?
-    #[derive(Debug, Decode)]
+    #[derive(Debug, Decode, Encode)]
     pub struct DisplaySkcdPackageCopy {
         // IMPORTANT BoundedVec does not seem to be Deserializeable, even if we are indeed using "frame-support" containing
         // https://github.com/paritytech/substrate/pull/11314

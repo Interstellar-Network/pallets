@@ -16,4 +16,5 @@ resolver = "2"
 
 # [patch."https://github.com/Interstellar-Network/rs-common.git"]
 # http-grpc-client = { path = "../rs-common/http-grpc-client/" }
+# tests-utils = { path = "../rs-common/tests_utils/" }
 ################################################################################

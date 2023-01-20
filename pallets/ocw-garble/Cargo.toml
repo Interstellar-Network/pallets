@@ -117,3 +117,6 @@ test-log = "0.2"
 
 tests-utils = { path = "../../tests_utils" }
 httpmock = "0.6"
+tokio = { version = "*", default-features = false, features = ["rt", "macros"] }
+futures = "0.3"
+hex = "0.4"

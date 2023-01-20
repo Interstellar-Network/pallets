@@ -15,7 +15,9 @@ use sp_runtime::{
     testing::{Header, TestXt},
     traits::{BlakeTwo256, Extrinsic as ExtrinsicT, IdentifyAccount, IdentityLookup, Verify},
 };
+use std::io::Cursor;
 use tests_utils::foreign_ipfs;
+use tests_utils::foreign_ipfs::IpfsApi;
 
 type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
 type Block = frame_system::mocking::MockBlock<Test>;
@@ -117,7 +119,7 @@ impl pallet_ocw_garble::Config for Test {
 }
 
 // Build genesis storage according to the mock runtime.
-pub fn new_test_ext() -> (sp_io::TestExternalities, foreign_ipfs::ForeignNode) {
+pub async fn new_test_ext() -> (sp_io::TestExternalities, foreign_ipfs::ForeignNode) {
     // MOCK "integritee-node" RPC
     let mock_server_uri_node = MockServer::start();
 
@@ -128,15 +130,45 @@ pub fn new_test_ext() -> (sp_io::TestExternalities, foreign_ipfs::ForeignNode) {
     t.register_extension(OffchainWorkerExt::new(offchain));
 
     // NOTE: PORT hardcoded in lib.rs so we can use a dynamic one
-    let (foreign_node, _ipfs_reference_client) = foreign_ipfs::run_ipfs_in_background(None);
+    let (foreign_node, ipfs_reference_client) = foreign_ipfs::run_ipfs_in_background(None);
     std::env::set_var(
         "IPFS_ROOT_URL",
         format!("http://127.0.0.1:{}", foreign_node.api_port),
     );
 
-    mock_ocw_circuits_storage_value_response(&mock_server_uri_node);
+    // IPFS ADD the .skcd needed
+    // let content = &[65u8, 90, 97, 122]; // AZaz
+    let cursor = Cursor::new(include_bytes!(
+        "../tests/data/display_message_120x52_2digits.skcd.pb.bin"
+    ));
+    let ipfs_add_response_1 = ipfs_reference_client.add(cursor).await.unwrap();
+    let cursor = Cursor::new(include_bytes!(
+        "../tests/data/display_pinpad_590x50.skcd.pb.bin"
+    ));
+    let ipfs_add_response_2 = ipfs_reference_client.add(cursor).await.unwrap();
+
+    mock_ocw_circuits_storage_value_response(
+        &mock_server_uri_node,
+        ipfs_add_response_1.hash,
+        ipfs_add_response_2.hash,
+    );
 
     (t, foreign_node)
+}
+
+/// Compute the Storage key
+/// cf https://docs.substrate.io/build/remote-procedure-calls/
+/// NOTE: this is bad, it will fail if the storage changes, and the compiler will not catch it!
+/// https://substrate.stackexchange.com/questions/3354/access-storage-map-from-another-pallet-without-trait-pallet-config
+fn compute_storage_hash_hex(pallet: &str, storage_key: &str) -> String {
+    let pallet_hash = sp_io::hashing::twox_128(pallet.as_bytes());
+    let storage_hash = sp_io::hashing::twox_128(storage_key.as_bytes());
+
+    let mut final_key = Vec::new();
+    final_key.extend_from_slice(&pallet_hash);
+    final_key.extend_from_slice(&storage_hash);
+
+    "0x".to_string() + &hex::encode(final_key)
 }
 
 /// For now b/c https://github.com/integritee-network/worker/issues/976
@@ -144,26 +176,58 @@ pub fn new_test_ext() -> (sp_io::TestExternalities, foreign_ipfs::ForeignNode) {
 /// cf "fn get_ocw_circuits_storage_value"
 ///
 /// based on https://github.com/paritytech/substrate/blob/e9b0facf70eeb08032cc7e83548c62f0b4a24bb1/frame/examples/offchain-worker/src/tests.rs#L385
-fn mock_ocw_circuits_storage_value_response(server: &MockServer) {
+fn mock_ocw_circuits_storage_value_response(
+    server: &MockServer,
+    message_skcd_cid: String,
+    pinpad_skcd_cid: String,
+) {
     let body_json = json!({
         "jsonrpc": "2.0",
         "id": "1",
         "method":"state_getStorage",
-        // TODO compute this dynamically
-        "params": ["0x2c644167ae9423d1f0683de9002940b8bd009489ffa75ba4c0b3f4f6fed7414b"]
+        "params": [compute_storage_hash_hex("OcwCircuits", "DisplaySkcdPackageValue")]
     });
     let body = serde_json::to_string(&body_json).unwrap();
+
+    let display_skcd_package = DisplaySkcdPackageCopy {
+        message_skcd_cid: message_skcd_cid.as_bytes().to_vec(),
+        message_skcd_server_metadata_nb_digits: 2,
+        pinpad_skcd_cid: pinpad_skcd_cid.as_bytes().to_vec(),
+        pinpad_skcd_server_metadata_nb_digits: 10,
+    };
+    let display_skcd_package_encoded = display_skcd_package.encode();
+    let display_skcd_package_encoded_hex =
+        "0x".to_string() + &hex::encode(display_skcd_package_encoded);
+
+    let response_body_json = json!({
+        "id": "1",
+        "jsonrpc": "2.0",
+        "result": display_skcd_package_encoded_hex,
+    });
+    let response_body = serde_json::to_vec(&response_body_json).unwrap();
 
     server.mock(|when, then| {
         when.method(POST)
             .path("/")
             .header("Content-Type", "application/json;charset=utf-8")
-            .body(&body)
-            ;
+            .body(&body);
         then.status(200)
             .header("content-type", "application/json; charset=utf-8")
             // cf "fn decode_rpc_json" for the expected format
             // MUST match the param passed to "mock_ipfs_cat_response"
-            .body(br#"{"id": "1", "jsonrpc": "2.0", "result": "0xb8516d626945354373524d4a7565316b5455784d5a5162694e394a794e5075384842675a346138726a6d344353776602000000b8516d5a7870436964427066624c74675534796434574a314d7654436e5539316e7867394132446137735a7069636d0a000000"}"#.to_vec());
+            .body(response_body);
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_compute_storage_hash_hex_reference() {
+        assert_eq!(
+            compute_storage_hash_hex("OcwCircuits", "DisplaySkcdPackageValue"),
+            "0x2c644167ae9423d1f0683de9002940b8bd009489ffa75ba4c0b3f4f6fed7414b"
+        );
+    }
 }
