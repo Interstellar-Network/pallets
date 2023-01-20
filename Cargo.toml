@@ -1,6 +1,5 @@
 [workspace]
 members = [
-    "ocw-common",
     "pallets/mobile-registry",
     "pallets/ocw-circuits",
     "pallets/ocw-garble",
@@ -14,4 +13,7 @@ resolver = "2"
 # [patch."https://github.com/Interstellar-Network/lib-garble-rs.git"]
 # lib-garble-rs = { path = "../lib-garble-rs/lib-garble-rs/" }
 # ipfs-client-http-req = { path = "../lib-garble-rs/ipfs-client-http-req/" }
+
+# [patch."https://github.com/Interstellar-Network/rs-common.git"]
+# http-grpc-client = { path = "../rs-common/http-grpc-client/" }
 ################################################################################

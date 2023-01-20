@@ -305,25 +305,31 @@ pub mod pallet {
 
             let endpoint = get_node_uri();
 
-            let (resp_bytes, resp_content_type) = ocw_common::http_req_fetch_from_remote_grpc_web(
-                Some(bytes::Bytes::from(serde_json::to_vec(&body_json).unwrap())),
-                &endpoint,
-                ocw_common::RequestMethod::Post,
-                Some(ocw_common::ContentType::Json),
-                core::time::Duration::from_millis(2_000),
-            )
-            .map_err(|e| {
-                log::error!(
-                    "[ocw-garble] call_grpc_garble error: {:?} [{:?}]",
-                    e,
-                    endpoint
-                );
-                <Error<T>>::HttpFetchingError
-            })
-            .unwrap();
+            let (resp_bytes, resp_content_type) =
+                http_grpc_client::http_req_fetch_from_remote_grpc_web(
+                    Some(bytes::Bytes::from(serde_json::to_vec(&body_json).unwrap())),
+                    &endpoint,
+                    &http_grpc_client::RequestMethod::Post,
+                    Some(&http_grpc_client::ContentType::Json),
+                    core::time::Duration::from_millis(2_000),
+                )
+                .map_err(|e| {
+                    log::error!(
+                        "[ocw-garble] call_grpc_garble error: {:?} [{:?}]",
+                        e,
+                        endpoint
+                    );
+                    <Error<T>>::HttpFetchingError
+                })
+                .unwrap();
 
             let response: DisplaySkcdPackageCopy =
-                ocw_common::decode_rpc_json(resp_bytes, resp_content_type);
+                http_grpc_client::decode_rpc_json(&resp_bytes, &resp_content_type).map_err(
+                    |e| {
+                        log::error!("[ocw-circuits] call_grpc_generic error: {:?}", e);
+                        <Error<T>>::DeserializeError
+                    },
+                )?;
             log::info!(
                 "[ocw-garble] get_ocw_circuits_storage_value response : {:?}",
                 response

@@ -188,6 +188,7 @@ pub mod pallet {
         HttpFetchingError,
         DeserializeToObjError,
         DeserializeToStrError,
+        EncodeError,
 
         // get_display_circuits_package(ie pallet_ocw_garble) was called
         // but "DisplaySkcdPackageValue" is not completely set
@@ -481,7 +482,8 @@ pub mod pallet {
             let input = crate::interstellarpbapicircuits::SkcdGenericFromIpfsRequest {
                 verilog_cid: verilog_cid_str,
             };
-            let body_bytes = ocw_common::encode_body_grpc_web(input);
+            let body_bytes = http_grpc_client::encode_body_grpc_web(&input)
+                .map_err(|_| <Error<T>>::EncodeError)?;
 
             // construct the full endpoint URI using:
             // - dynamic "URI root" from env
@@ -493,11 +495,11 @@ pub mod pallet {
             let endpoint = format!("{}{}", uri_root, API_ENDPOINT_GENERIC_URL);
 
             let (resp_bytes, resp_content_type) =
-                ocw_common::sp_offchain_fetch_from_remote_grpc_web(
+                http_grpc_client::sp_offchain_fetch_from_remote_grpc_web(
                     Some(body_bytes),
                     &endpoint,
-                    ocw_common::RequestMethod::Post,
-                    Some(ocw_common::ContentType::GrpcWeb),
+                    &http_grpc_client::RequestMethod::Post,
+                    Some(&http_grpc_client::ContentType::GrpcWeb),
                     // Since the "Swanky refactor" this is quite slow; around 45-50s locally
                     // But add some margin for CI and demos
                     core::time::Duration::from_millis(120_000),
@@ -508,7 +510,12 @@ pub mod pallet {
                 })?;
 
             let resp: crate::interstellarpbapicircuits::SkcdGenericFromIpfsReply =
-                ocw_common::decode_body_grpc_web(resp_bytes, resp_content_type);
+                http_grpc_client::decode_body_grpc_web(resp_bytes, &resp_content_type).map_err(
+                    |e| {
+                        log::error!("[ocw-circuits] call_grpc_generic error: {:?}", e);
+                        <Error<T>>::DeserializeToObjError
+                    },
+                )?;
             Ok(GrpcCallReplyKind::Generic(resp))
         }
 
@@ -564,7 +571,8 @@ pub mod pallet {
                     }
                 };
 
-                let body_bytes = ocw_common::encode_body_grpc_web(input);
+                let body_bytes = http_grpc_client::encode_body_grpc_web(&input)
+                    .map_err(|_| <Error<T>>::EncodeError)?;
 
                 // construct the full endpoint URI using:
                 // - dynamic "URI root" from env
@@ -576,11 +584,11 @@ pub mod pallet {
                 let endpoint = format!("{}{}", uri_root, API_ENDPOINT_DISPLAY_URL);
 
                 let (resp_bytes, resp_content_type) =
-                    ocw_common::sp_offchain_fetch_from_remote_grpc_web(
+                    http_grpc_client::sp_offchain_fetch_from_remote_grpc_web(
                         Some(body_bytes),
                         &endpoint,
-                        ocw_common::RequestMethod::Post,
-                        Some(ocw_common::ContentType::GrpcWeb),
+                        &http_grpc_client::RequestMethod::Post,
+                        Some(&http_grpc_client::ContentType::GrpcWeb),
                         // Since the "Swanky refactor" this is quite slow; around 45-50s locally
                         // But add some margin for CI and demos
                         core::time::Duration::from_millis(120_000),
@@ -591,7 +599,11 @@ pub mod pallet {
                     })?;
 
                 let resp: crate::interstellarpbapicircuits::SkcdDisplayReply =
-                    ocw_common::decode_body_grpc_web(resp_bytes, resp_content_type);
+                    http_grpc_client::decode_body_grpc_web(resp_bytes, &resp_content_type)
+                        .map_err(|e| {
+                            log::error!("[ocw-circuits] call_grpc_generic error: {:?}", e);
+                            <Error<T>>::DeserializeToObjError
+                        })?;
 
                 Ok(resp)
             }
