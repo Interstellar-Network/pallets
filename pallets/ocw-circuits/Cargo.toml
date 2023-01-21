@@ -62,6 +62,9 @@ std = [
 	"sp-keystore/std",
 	"http-grpc-client/std",
 ]
+sgx = [
+	"http-grpc-client/sgx",
+]
 runtime-benchmarks = ["frame-benchmarking/runtime-benchmarks"]
 try-runtime = ["frame-support/try-runtime"]
 
