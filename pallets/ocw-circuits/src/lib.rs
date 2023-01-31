@@ -492,7 +492,7 @@ pub mod pallet {
             let uri_root = std::env::var("aaa").unwrap();
             #[cfg(not(feature = "std"))]
             let uri_root = "PLACEHOLDER_no_std";
-            let endpoint = format!("{}{}", uri_root, API_ENDPOINT_GENERIC_URL);
+            let endpoint = format!("{uri_root}{API_ENDPOINT_GENERIC_URL}");
 
             let (resp_bytes, resp_content_type) =
                 http_grpc_client::sp_offchain_fetch_from_remote_grpc_web(
@@ -581,7 +581,7 @@ pub mod pallet {
                 let uri_root = std::env::var("INTERSTELLAR_URI_ROOT_API_CIRCUITS").unwrap();
                 #[cfg(not(feature = "std"))]
                 let uri_root = "PLACEHOLDER_no_std";
-                let endpoint = format!("{}{}", uri_root, API_ENDPOINT_DISPLAY_URL);
+                let endpoint = format!("{uri_root}{API_ENDPOINT_DISPLAY_URL}");
 
                 let (resp_bytes, resp_content_type) =
                     http_grpc_client::sp_offchain_fetch_from_remote_grpc_web(
