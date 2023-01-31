@@ -23,7 +23,6 @@ use serde_json::json;
 use sp_core::crypto::KeyTypeId;
 use sp_runtime::traits::BlockNumberProvider;
 use sp_runtime::transaction_validity::InvalidTransaction;
-use sp_runtime::RuntimeDebug;
 use sp_std::borrow::ToOwned;
 use sp_std::str;
 use sp_std::vec::Vec;
@@ -55,6 +54,8 @@ pub mod pallet {
     use super::*;
     use frame_support::pallet_prelude::*;
     use frame_system::pallet_prelude::*;
+
+    pub use circuits_storage_common::DisplayStrippedCircuitsPackage;
 
     /// Defines application identifier for crypto keys of this module.
     ///
@@ -121,31 +122,6 @@ pub mod pallet {
         type AuthorityId: AppCrypto<Self::Public, Self::Signature>;
         #[cfg(test)]
         type HookCallGrpGarbleAndStripSerializedPackageForEval: MyTestCallback;
-    }
-
-    /// Easy way to make a link b/w a "message" and "pinpad" circuits
-    /// that way we can have ONE extrinsic that generates both in one call
-    ///
-    /// It SHOULD roughly mirror pallet_ocw_circuits::DisplaySkcdPackage
-    #[derive(
-        Clone,
-        Encode,
-        Decode,
-        Eq,
-        PartialEq,
-        RuntimeDebug,
-        Default,
-        scale_info::TypeInfo,
-        MaxEncodedLen,
-    )]
-    pub struct DisplayStrippedCircuitsPackage {
-        // 32 b/c IPFS hash is 256 bits = 32 bytes
-        // But due to encoding(??) in practice it is 46 bytes(checked with debugger), and we take some margin
-        pub message_pgarbled_cid: BoundedVec<u8, ConstU32<64>>,
-        pub message_packmsg_cid: BoundedVec<u8, ConstU32<64>>,
-        pub pinpad_pgarbled_cid: BoundedVec<u8, ConstU32<64>>,
-        pub pinpad_packmsg_cid: BoundedVec<u8, ConstU32<64>>,
-        message_nb_digits: u32,
     }
 
     pub type PendingCircuitsType = BoundedVec<
