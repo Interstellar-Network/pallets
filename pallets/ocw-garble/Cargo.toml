@@ -117,7 +117,7 @@ try-runtime = ["frame-support/try-runtime"]
 env_logger = "0.10"
 test-log = "0.2"
 
-tests-utils = { path = "../../tests_utils" }
+tests-utils = { default-features = false, git = "https://github.com/Interstellar-Network/rs-common.git", branch = "interstellar-M5" }
 httpmock = "0.6"
 tokio = { version = "*", default-features = false, features = ["rt", "macros"] }
 futures = "0.3"

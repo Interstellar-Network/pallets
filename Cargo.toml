@@ -6,7 +6,6 @@ members = [
     "pallets/ocw-garble",
     "pallets/tx-registry",
     "pallets/tx-validation",
-    "tests_utils"
 ]
 resolver = "2"
 
