@@ -373,12 +373,16 @@ pub mod pallet {
 
     // reply type for each GrpcCallKind
     enum GrpcCallReplyKind {
-        Generic(crate::interstellarpbapicircuits::SkcdGenericFromIpfsReply),
+        Generic {
+            reply: crate::interstellarpbapicircuits::SkcdGenericFromIpfsReply,
+        },
         // one reply for message, one for pinpad
-        Display(
-            crate::interstellarpbapicircuits::SkcdDisplayReply,
-            crate::interstellarpbapicircuits::SkcdDisplayReply,
-        ),
+        Display {
+            message_reply: crate::interstellarpbapicircuits::SkcdDisplayReply,
+            message_nb_digits: u32,
+            pinpad_reply: crate::interstellarpbapicircuits::SkcdDisplayReply,
+            pinpad_nb_digits: u32,
+        },
     }
 
     #[derive(Debug, Deserialize, Encode, Decode, Default)]
@@ -516,17 +520,22 @@ pub mod pallet {
                         <Error<T>>::DeserializeToObjError
                     },
                 )?;
-            Ok(GrpcCallReplyKind::Generic(resp))
+            Ok(GrpcCallReplyKind::Generic { reply: resp })
         }
 
         /// Call the GRPC endpoint API_ENDPOINT_GENERIC_URL, encoding the request as grpc-web, and decoding the response
         ///
-        /// return: a IPFS hash
+        /// return:
+        /// - a IPFS hash
+        /// - the number of digits(that was sent to `api_circuits` in the Request, and SHOULD be "burned in" the Garbled Circuit)
+        ///   NOTE: it is CRITICAL to expose this number of digits(eg via the Storage, or RPC) b/c `pallet-ocw-garble`
+        ///         MUST know it when attempting to garble the circuit to generate the correct number of random digits.
         fn call_grpc_display() -> Result<GrpcCallReplyKind, Error<T>> {
             /// aux function: call API_ENDPOINT_DISPLAY_URL for either is_message or not
             fn call_grpc_display_one<T>(
                 is_message: bool,
-            ) -> Result<crate::interstellarpbapicircuits::SkcdDisplayReply, Error<T>> {
+            ) -> Result<(crate::interstellarpbapicircuits::SkcdDisplayReply, u32), Error<T>>
+            {
                 let input = if is_message {
                     crate::interstellarpbapicircuits::SkcdDisplayRequest {
                         width: DEFAULT_MESSAGE_WIDTH,
@@ -605,17 +614,23 @@ pub mod pallet {
                             <Error<T>>::DeserializeToObjError
                         })?;
 
-                Ok(resp)
+                // nb_digits: we send in the Request one "BBox" per digit(ie 4 floats)
+                // NOTE: if we are here we can guarantee the C++ has checked it was indeed valid BBox so we can / 4 and this is it
+                Ok((resp, (input.digits_bboxes.len() / 4).try_into().unwrap()))
             }
 
-            let message_reply = call_grpc_display_one::<T>(true);
-            let pinpad_reply = call_grpc_display_one::<T>(false);
+            let (message_reply, message_nb_digits) =
+                call_grpc_display_one::<T>(true).expect("message_reply failed!");
+            let (pinpad_reply, pinpad_nb_digits) =
+                call_grpc_display_one::<T>(false).expect("pinpad_reply failed!");
 
             // TODO pass correct params for pinpad and message
-            Ok(GrpcCallReplyKind::Display(
-                message_reply.expect("message_reply failed!"),
-                pinpad_reply.expect("pinpad_reply failed!"),
-            ))
+            Ok(GrpcCallReplyKind::Display {
+                message_reply,
+                message_nb_digits,
+                pinpad_reply,
+                pinpad_nb_digits,
+            })
         }
 
         /// Called at the end of process_if_needed/offchain_worker
@@ -639,25 +654,20 @@ pub mod pallet {
                     }
 
                     let results = signer.send_signed_transaction(|_account| match &result_reply {
-                        GrpcCallReplyKind::Generic(reply) => Call::callback_new_skcd_signed {
+                        GrpcCallReplyKind::Generic { reply } => Call::callback_new_skcd_signed {
                             skcd_cid: reply.skcd_cid.bytes().collect(),
                         },
-                        GrpcCallReplyKind::Display(message_reply, pinpad_reply) => {
-                            Call::callback_new_display_circuits_package_signed {
-                                message_skcd_cid: message_reply.skcd_cid.bytes().collect(),
-                                message_nb_digits: message_reply
-                                    .server_metadata
-                                    .as_ref()
-                                    .unwrap()
-                                    .nb_digits,
-                                pinpad_skcd_cid: pinpad_reply.skcd_cid.bytes().collect(),
-                                pinpad_nb_digits: pinpad_reply
-                                    .server_metadata
-                                    .as_ref()
-                                    .unwrap()
-                                    .nb_digits,
-                            }
-                        }
+                        GrpcCallReplyKind::Display {
+                            message_reply,
+                            message_nb_digits,
+                            pinpad_reply,
+                            pinpad_nb_digits,
+                        } => Call::callback_new_display_circuits_package_signed {
+                            message_skcd_cid: message_reply.skcd_cid.bytes().collect(),
+                            message_nb_digits: *message_nb_digits,
+                            pinpad_skcd_cid: pinpad_reply.skcd_cid.bytes().collect(),
+                            pinpad_nb_digits: *pinpad_nb_digits,
+                        },
                     });
 
                     log::info!(
