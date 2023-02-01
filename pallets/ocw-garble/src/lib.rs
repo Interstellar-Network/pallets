@@ -216,6 +216,8 @@ pub mod pallet {
         DeserializeError,
         IpfsClientCreationError,
         IpfsCallError,
+        GarblerError,
+        Utf8Error,
     }
 
     #[pallet::hooks]
@@ -296,8 +298,7 @@ pub mod pallet {
                         endpoint
                     );
                     <Error<T>>::HttpFetchingError
-                })
-                .unwrap();
+                })?;
 
             let response: DisplaySkcdPackageCopy =
                 http_grpc_client::decode_rpc_json(&resp_bytes, &resp_content_type).map_err(
@@ -350,10 +351,10 @@ pub mod pallet {
 
             log::info!(
                 "[ocw-garble] callback_new_garbled_and_strip_signed: ({:?},{:?}) ({:?},{:?}) for {:?}",
-                sp_std::str::from_utf8(&message_pgarbled_cid).expect("message_pgarbled_cid utf8"),
-                sp_std::str::from_utf8(&message_packmsg_cid).expect("message_packmsg_cid utf8"),
-                sp_std::str::from_utf8(&pinpad_pgarbled_cid).expect("pinpad_pgarbled_cid utf8"),
-                sp_std::str::from_utf8(&pinpad_packmsg_cid).expect("pinpad_packmsg_cid utf8"),
+                sp_std::str::from_utf8(&message_pgarbled_cid).map_err(|_err| <Error<T>>::Utf8Error)?,
+                sp_std::str::from_utf8(&message_packmsg_cid).map_err(|_err| <Error<T>>::Utf8Error)?,
+                sp_std::str::from_utf8(&pinpad_pgarbled_cid).map_err(|_err| <Error<T>>::Utf8Error)?,
+                sp_std::str::from_utf8(&pinpad_packmsg_cid).map_err(|_err| <Error<T>>::Utf8Error)?,
                 who
             );
 
@@ -423,7 +424,7 @@ pub mod pallet {
             let who = ensure_signed(origin)?;
             log::info!(
                 "[ocw-garble] garble_standard_signed: ({}, {:?})",
-                sp_std::str::from_utf8(&skcd_cid).expect("skcd_cid utf8"),
+                sp_std::str::from_utf8(&skcd_cid).map_err(|err| <Error<T>>::Utf8Error)?,
                 who
             );
 
@@ -450,7 +451,7 @@ pub mod pallet {
             let who = ensure_signed(origin)?;
             log::info!(
                 "[ocw-garble] garble_and_strip_display_circuits_package_signed: ({:?} for {:?})",
-                sp_std::str::from_utf8(&tx_msg).expect("tx_msg utf8"),
+                sp_std::str::from_utf8(&tx_msg).map_err(|_err| <Error<T>>::Utf8Error)?,
                 who
             );
 
@@ -473,15 +474,15 @@ pub mod pallet {
             //
             // let display_circuits_package = <DisplaySkcdPackageValueCopy<T>>::get();
             //
-            let display_circuits_package = Self::get_ocw_circuits_storage_value().unwrap();
+            let display_circuits_package = Self::get_ocw_circuits_storage_value()?;
 
             log::info!(
                 "[ocw-garble] display_circuits_package: ({:?},{:?}) ({:?},{:?})",
                 sp_std::str::from_utf8(&display_circuits_package.message_skcd_cid)
-                    .expect("message_skcd_cid utf8"),
+                    .map_err(|_err| <Error<T>>::Utf8Error)?,
                 display_circuits_package.message_skcd_server_metadata_nb_digits,
                 sp_std::str::from_utf8(&display_circuits_package.pinpad_skcd_cid)
-                    .expect("pinpad_skcd_cid utf8"),
+                    .map_err(|_err| <Error<T>>::Utf8Error)?,
                 display_circuits_package.pinpad_skcd_server_metadata_nb_digits,
             );
 
@@ -504,9 +505,13 @@ pub mod pallet {
             // and 10 digits(NOT u8) for the pinpad
             // MUST SHUFFLE the pinpad digits, NOT randomize them
             // each digit from 0 to 10 (included!) MUST be in the final "digits"
-            let mut pinpad_digits: Vec<u8> = (0..10).collect();
+            let mut pinpad_digits: Vec<u8> =
+                (0..display_circuits_package.pinpad_skcd_server_metadata_nb_digits as u8).collect();
             pinpad_digits.shuffle(&mut rng);
-            let message_digits: Vec<u8> = (0..2).map(|_| rng.gen_range(0..10)).collect();
+            let message_digits: Vec<u8> =
+                (0..display_circuits_package.message_skcd_server_metadata_nb_digits as u8)
+                    .map(|_| rng.gen_range(0..10))
+                    .collect();
             log::info!(
                 "[ocw-garble] pinpad_digits: {:?}, message_digits: {:?}",
                 pinpad_digits,
@@ -532,8 +537,7 @@ pub mod pallet {
                 tx_msg,
                 message_digits,
                 pinpad_digits,
-            )
-            .expect("call_grpc_garble_and_strip failed!");
+            )?;
 
             let (message_reply, message_digits, pinpad_reply, pinpad_digits) =
                 match result_grpc_call {
@@ -574,7 +578,7 @@ pub mod pallet {
             let who = ensure_signed(origin)?;
             log::info!(
                 "[ocw-garble] callback_new_garbled_signed: ({:?},{:?})",
-                sp_std::str::from_utf8(&pgarbled_cid).expect("skcd_cid utf8"),
+                sp_std::str::from_utf8(&pgarbled_cid).map_err(|_err| <Error<T>>::Utf8Error)?,
                 who
             );
 
@@ -638,10 +642,10 @@ pub mod pallet {
                 digits: Vec<u8>,
             ) -> Result<crate::GarbleAndStripIpfsReply, Error<T>> {
                 let skcd_cid_str = sp_std::str::from_utf8(&skcd_cid)
-                    .expect("call_grpc_garble_and_strip from_utf8")
+                    .map_err(|_err| <Error<T>>::Utf8Error)?
                     .to_owned();
                 let tx_msg_str = sp_std::str::from_utf8(&tx_msg)
-                    .expect("call_grpc_garble_and_strip from_utf8")
+                    .map_err(|_err| <Error<T>>::Utf8Error)?
                     .to_owned();
 
                 let ipfs_client =
@@ -654,7 +658,14 @@ pub mod pallet {
                     <Error<T>>::IpfsCallError
                 })?;
 
-                let garb = lib_garble_rs::garble_skcd(&skcd_buf).unwrap();
+                let garb = lib_garble_rs::garble_skcd(&skcd_buf).map_err(|err| {
+                    log::error!(
+                        "[ocw-garble] lib_garble_rs::garble_skcd error: {:?} {:?}",
+                        err.to_string(),
+                        err
+                    );
+                    <Error<T>>::GarblerError
+                })?;
                 // "packsmg"
                 let encoded_garbler_inputs =
                     lib_garble_rs::garbled_display_circuit_prepare_garbler_inputs(
@@ -662,10 +673,26 @@ pub mod pallet {
                         &digits,
                         &tx_msg_str,
                     )
-                    .unwrap();
+                    .map_err(|err| {
+                        log::error!(
+                            "[ocw-garble] lib_garble_rs::garbled_display_circuit_prepare_garbler_inputs error: {:?} {:?}",
+                            err.to_string(),
+                            err
+                        );
+                        <Error<T>>::GarblerError
+                    })?;
                 // then serialize "garb" and "packmsg"
                 let serialized_package_for_eval =
-                    lib_garble_rs::serialize_for_evaluator(garb, encoded_garbler_inputs).unwrap();
+                    lib_garble_rs::serialize_for_evaluator(garb, encoded_garbler_inputs).map_err(
+                        |err| {
+                            log::error!(
+                        "[ocw-garble] lib_garble_rs::serialize_for_evaluator error: {:?} {:?}",
+                        err.to_string(),
+                        err
+                    );
+                            <Error<T>>::GarblerError
+                        },
+                    )?;
 
                 // the tests need the full body bytes to mock correctly...
                 #[cfg(test)]
@@ -694,14 +721,12 @@ pub mod pallet {
                 message_skcd_ipfs_cid,
                 tx_msg,
                 message_digits.clone(),
-            )
-            .expect("message_reply failed!");
+            )?;
             let pinpad_reply = call_grpc_garble_and_strip_one::<T>(
                 pinpad_skcd_ipfs_cid,
                 vec![],
                 pinpad_digits.clone(),
-            )
-            .expect("message_reply failed!");
+            )?;
 
             // TODO pass correct params for pinpad and message
             Ok(GrpcCallReplyKind::GarbleAndStrip(

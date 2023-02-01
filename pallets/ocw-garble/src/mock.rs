@@ -118,11 +118,29 @@ impl pallet_ocw_garble::Config for Test {
     type HookCallGrpGarbleAndStripSerializedPackageForEval = MyTestCallbackMock;
 }
 
-// Build genesis storage according to the mock runtime.
-pub async fn new_test_ext() -> (sp_io::TestExternalities, foreign_ipfs::ForeignNode) {
+pub(crate) enum MockType {
+    /// standard use case; two valid .skcd already present in IPFS via pallet-ocw-circuits
+    RpcOcwCircuitsStorageValid,
+    /// error case: the IPFS hash point to something that is NOT a .skcd
+    /// it SHOULD fail at "lib_garble_rs::garble_skcd"
+    InvalidSkcd,
+    /// error case: CAN NOT connect to the node
+    RpcOcwCircuitsStorageNoResponse,
+    /// error case: the node contains ocwCircuits; BUT they are not valid IPFS hash
+    RpcOcwCircuitsStorageInvalidHashes,
+    /// error case: can not connect to IPFS,
+    IpfsDown,
+}
+
+/// Build genesis storage according to the mock runtime.
+///
+/// should_mock_rpc_ocw_circuits_storage_valid:
+/// should_mock_rpc_ocw_circuits_storage_bad_hashes: pallet-ocw-circuits, but the IPFS hashes point to nowhere
+pub(crate) async fn new_test_ext(
+    mock_type: MockType,
+) -> (sp_io::TestExternalities, foreign_ipfs::ForeignNode) {
     // MOCK "integritee-node" RPC
     let mock_server_uri_node = MockServer::start();
-
     std::env::set_var("INTERSTELLAR_URI_NODE", mock_server_uri_node.base_url());
 
     let (offchain, state) = testing::TestOffchainExt::new();
@@ -136,22 +154,52 @@ pub async fn new_test_ext() -> (sp_io::TestExternalities, foreign_ipfs::ForeignN
         format!("http://127.0.0.1:{}", foreign_node.api_port),
     );
 
-    // IPFS ADD the .skcd needed
-    // let content = &[65u8, 90, 97, 122]; // AZaz
-    let cursor = Cursor::new(include_bytes!(
-        "../tests/data/display_message_120x52_2digits.skcd.pb.bin"
-    ));
-    let ipfs_add_response_1 = ipfs_reference_client.add(cursor).await.unwrap();
-    let cursor = Cursor::new(include_bytes!(
-        "../tests/data/display_pinpad_590x50.skcd.pb.bin"
-    ));
-    let ipfs_add_response_2 = ipfs_reference_client.add(cursor).await.unwrap();
+    match mock_type {
+        MockType::RpcOcwCircuitsStorageValid | MockType::IpfsDown | MockType::InvalidSkcd => {
+            // IPFS ADD the .skcd needed
+            // let content = &[65u8, 90, 97, 122]; // AZaz
+            let cursor = match mock_type {
+                MockType::InvalidSkcd => Cursor::new(vec![42, 42]),
+                _ => {
+                    let bytes =
+                        include_bytes!("../tests/data/display_message_120x52_2digits.skcd.pb.bin")
+                            .to_vec();
+                    Cursor::new(bytes)
+                }
+            };
+            let ipfs_add_response_1 = ipfs_reference_client.add(cursor).await.unwrap();
+            let cursor = Cursor::new(include_bytes!(
+                "../tests/data/display_pinpad_590x50.skcd.pb.bin"
+            ));
+            let ipfs_add_response_2 = ipfs_reference_client.add(cursor).await.unwrap();
 
-    mock_ocw_circuits_storage_value_response(
-        &mock_server_uri_node,
-        ipfs_add_response_1.hash,
-        ipfs_add_response_2.hash,
-    );
+            mock_ocw_circuits_storage_value_response(
+                &mock_server_uri_node,
+                ipfs_add_response_1.hash,
+                ipfs_add_response_2.hash,
+            );
+
+            match mock_type {
+                MockType::IpfsDown => {
+                    // "Kill the server": use a bad env var "IPFS_ROOT_URL"
+                    std::env::set_var("IPFS_ROOT_URL", format!("http://127.0.0.1:{}", "4242"));
+                }
+                _ => {}
+            }
+        }
+        MockType::RpcOcwCircuitsStorageNoResponse => {
+            // nothing to do
+        }
+        MockType::RpcOcwCircuitsStorageInvalidHashes => {
+            mock_ocw_circuits_storage_value_response(
+                &mock_server_uri_node,
+                // anything should work
+                // obtained by grep "ipfs cat /ipfs/" on https://docs.ipfs.tech/how-to/command-line-quick-start/#initialize-the-repository
+                "NOT_A_HASH".to_string(),
+                "QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG".to_string(),
+            );
+        }
+    }
 
     (t, foreign_node)
 }

@@ -116,6 +116,7 @@ try-runtime = ["frame-support/try-runtime"]
 [dev-dependencies]
 env_logger = "0.10"
 test-log = "0.2"
+serial_test = "1.0.0"
 
 tests-utils = { default-features = false, git = "https://github.com/Interstellar-Network/rs-common.git", branch = "interstellar-M5" }
 httpmock = "0.6"
