@@ -6,6 +6,7 @@ use frame_support::{
 };
 use httpmock::prelude::*;
 use serde_json::json;
+use sp_core::bounded::BoundedVec;
 use sp_core::{
     offchain::{testing, OffchainWorkerExt},
     sr25519::Signature,
@@ -30,10 +31,17 @@ frame_support::construct_runtime!(
         UncheckedExtrinsic = UncheckedExtrinsic,
     {
         System: frame_system::{Pallet, Call, Config, Storage, Event<T>},
+        OcwCircuits: pallet_ocw_circuits,
         TxValidation: pallet_tx_validation,
-        PalletOcwGarble: pallet_ocw_garble,
+        OcwGarble: pallet_ocw_garble,
     }
 );
+
+impl pallet_ocw_circuits::Config for Test {
+    type RuntimeEvent = RuntimeEvent;
+    type RuntimeCall = RuntimeCall;
+    type AuthorityId = crypto::TestAuthId;
+}
 
 impl pallet_tx_validation::Config for Test {
     type RuntimeEvent = RuntimeEvent;
@@ -130,6 +138,9 @@ pub(crate) enum MockType {
     RpcOcwCircuitsStorageInvalidHashes,
     /// error case: can not connect to IPFS,
     IpfsDown,
+    /// FALLBACK for https://github.com/Interstellar-Network/roadmap/issues/73
+    /// If the storage can not be raed directly(ie in `integritee-worker`) we MUST fallback to using the RPC
+    FallbackStorageNotWorkingInIntegriteeWorker,
 }
 
 /// Build genesis storage according to the mock runtime.
@@ -143,7 +154,7 @@ pub(crate) async fn new_test_ext(
     let mock_server_uri_node = MockServer::start();
     std::env::set_var("INTERSTELLAR_URI_NODE", mock_server_uri_node.base_url());
 
-    let (offchain, state) = testing::TestOffchainExt::new();
+    let (offchain, _state) = testing::TestOffchainExt::new();
     let mut t = sp_io::TestExternalities::default();
     t.register_extension(OffchainWorkerExt::new(offchain));
 
@@ -155,7 +166,10 @@ pub(crate) async fn new_test_ext(
     );
 
     match mock_type {
-        MockType::RpcOcwCircuitsStorageValid | MockType::IpfsDown | MockType::InvalidSkcd => {
+        MockType::RpcOcwCircuitsStorageValid
+        | MockType::IpfsDown
+        | MockType::InvalidSkcd
+        | MockType::FallbackStorageNotWorkingInIntegriteeWorker => {
             // IPFS ADD the .skcd needed
             // let content = &[65u8, 90, 97, 122]; // AZaz
             let cursor = match mock_type {
@@ -173,11 +187,24 @@ pub(crate) async fn new_test_ext(
             ));
             let ipfs_add_response_2 = ipfs_reference_client.add(cursor).await.unwrap();
 
-            mock_ocw_circuits_storage_value_response(
-                &mock_server_uri_node,
-                ipfs_add_response_1.hash,
-                ipfs_add_response_2.hash,
-            );
+            match mock_type {
+                MockType::FallbackStorageNotWorkingInIntegriteeWorker => {
+                    // DO NOT call set_ocw_circuits_storage_direct
+                    // But simply mock the http response
+                    fallback_rpc_ocw_circuits_storage_value(
+                        &mock_server_uri_node,
+                        ipfs_add_response_1.hash,
+                        ipfs_add_response_2.hash,
+                    );
+                }
+                _ => {
+                    set_ocw_circuits_storage_direct(
+                        ipfs_add_response_1.hash,
+                        ipfs_add_response_2.hash,
+                        &mut t,
+                    );
+                }
+            };
 
             match mock_type {
                 MockType::IpfsDown => {
@@ -191,12 +218,12 @@ pub(crate) async fn new_test_ext(
             // nothing to do
         }
         MockType::RpcOcwCircuitsStorageInvalidHashes => {
-            mock_ocw_circuits_storage_value_response(
-                &mock_server_uri_node,
+            set_ocw_circuits_storage_direct(
                 // anything should work
                 // obtained by grep "ipfs cat /ipfs/" on https://docs.ipfs.tech/how-to/command-line-quick-start/#initialize-the-repository
                 "NOT_A_HASH".to_string(),
                 "QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG".to_string(),
+                &mut t,
             );
         }
     }
@@ -204,19 +231,42 @@ pub(crate) async fn new_test_ext(
     (t, foreign_node)
 }
 
-/// Compute the Storage key
-/// cf https://docs.substrate.io/build/remote-procedure-calls/
-/// NOTE: this is bad, it will fail if the storage changes, and the compiler will not catch it!
-/// https://substrate.stackexchange.com/questions/3354/access-storage-map-from-another-pallet-without-trait-pallet-config
-fn compute_storage_hash_hex(pallet: &str, storage_key: &str) -> String {
-    let pallet_hash = sp_io::hashing::twox_128(pallet.as_bytes());
-    let storage_hash = sp_io::hashing::twox_128(storage_key.as_bytes());
+/// For now b/c https://github.com/integritee-network/worker/issues/976
+/// we query the storage using a HTTP request; so we need to Mock it
+/// cf "fn get_ocw_circuits_storage_value"
+///
+/// based on https://github.com/paritytech/substrate/blob/e9b0facf70eeb08032cc7e83548c62f0b4a24bb1/frame/examples/offchain-worker/src/tests.rs#L385
+fn set_ocw_circuits_storage_direct(
+    message_skcd_cid: String,
+    pinpad_skcd_cid: String,
+    t: &mut sp_io::TestExternalities,
+) {
+    t.execute_with(|| {
+        let display_skcd_package = pallet_ocw_circuits::DisplaySkcdPackage {
+            message_skcd_cid: TryInto::<BoundedVec<u8, ConstU32<64>>>::try_into(
+                message_skcd_cid.as_bytes().to_vec(),
+            )
+            .unwrap(),
+            message_skcd_server_metadata_nb_digits: 2,
+            pinpad_skcd_cid: TryInto::<BoundedVec<u8, ConstU32<64>>>::try_into(
+                pinpad_skcd_cid.as_bytes().to_vec(),
+            )
+            .unwrap(),
+            pinpad_skcd_server_metadata_nb_digits: 10,
+        };
+        let display_skcd_package_encoded = display_skcd_package.encode();
+        // DO NOT hex encode!
+        // let display_skcd_package_encoded_hex =
+        //     "0x".to_string() + &hex::encode(display_skcd_package_encoded);
 
-    let mut final_key = Vec::new();
-    final_key.extend_from_slice(&pallet_hash);
-    final_key.extend_from_slice(&storage_hash);
+        // NOTE: the pallet prefix is from "construct_runtime!" at the beginning of this file
+        let storage_key = frame_support::storage::storage_prefix(
+            "OcwCircuits".as_bytes(),
+            "DisplaySkcdPackageValue".as_bytes(),
+        );
 
-    "0x".to_string() + &hex::encode(final_key)
+        frame_support::storage::unhashed::put_raw(&storage_key, &display_skcd_package_encoded);
+    });
 }
 
 /// For now b/c https://github.com/integritee-network/worker/issues/976
@@ -224,7 +274,7 @@ fn compute_storage_hash_hex(pallet: &str, storage_key: &str) -> String {
 /// cf "fn get_ocw_circuits_storage_value"
 ///
 /// based on https://github.com/paritytech/substrate/blob/e9b0facf70eeb08032cc7e83548c62f0b4a24bb1/frame/examples/offchain-worker/src/tests.rs#L385
-fn mock_ocw_circuits_storage_value_response(
+fn fallback_rpc_ocw_circuits_storage_value(
     server: &MockServer,
     message_skcd_cid: String,
     pinpad_skcd_cid: String,
@@ -233,14 +283,20 @@ fn mock_ocw_circuits_storage_value_response(
         "jsonrpc": "2.0",
         "id": "1",
         "method":"state_getStorage",
-        "params": [compute_storage_hash_hex("OcwCircuits", "DisplaySkcdPackageValue")]
+        "params": [compute_storage_hash_hex_for_rpc("OcwCircuits", "DisplaySkcdPackageValue")]
     });
     let body = serde_json::to_string(&body_json).unwrap();
 
-    let display_skcd_package = DisplaySkcdPackageCopy {
-        message_skcd_cid: message_skcd_cid.as_bytes().to_vec(),
+    let display_skcd_package = pallet_ocw_circuits::DisplaySkcdPackage {
+        message_skcd_cid: TryInto::<BoundedVec<u8, ConstU32<64>>>::try_into(
+            message_skcd_cid.as_bytes().to_vec(),
+        )
+        .unwrap(),
         message_skcd_server_metadata_nb_digits: 2,
-        pinpad_skcd_cid: pinpad_skcd_cid.as_bytes().to_vec(),
+        pinpad_skcd_cid: TryInto::<BoundedVec<u8, ConstU32<64>>>::try_into(
+            pinpad_skcd_cid.as_bytes().to_vec(),
+        )
+        .unwrap(),
         pinpad_skcd_server_metadata_nb_digits: 10,
     };
     let display_skcd_package_encoded = display_skcd_package.encode();
@@ -274,7 +330,7 @@ mod tests {
     #[test]
     fn test_compute_storage_hash_hex_reference() {
         assert_eq!(
-            compute_storage_hash_hex("OcwCircuits", "DisplaySkcdPackageValue"),
+            compute_storage_hash_hex_for_rpc("OcwCircuits", "DisplaySkcdPackageValue"),
             "0x2c644167ae9423d1f0683de9002940b8bd009489ffa75ba4c0b3f4f6fed7414b"
         );
     }

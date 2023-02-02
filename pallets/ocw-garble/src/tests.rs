@@ -16,7 +16,7 @@ async fn test_garble_and_strip_display_circuits_package_signed(
         let account_id = test_pub();
 
         // Dispatch a signed extrinsic.
-        PalletOcwGarble::garble_and_strip_display_circuits_package_signed(
+        OcwGarble::garble_and_strip_display_circuits_package_signed(
             RuntimeOrigin::signed(account_id),
             vec![42],
         )
@@ -41,7 +41,7 @@ async fn test_rpc_ocw_circuits_storage_value_no_response_does_not_panic() {
     assert_err!(
         res,
         DispatchError::Module(ModuleError {
-            index: 2,
+            index: 3,
             error: [5, 0, 0, 0],
             message: Some("HttpFetchingError")
         })
@@ -59,8 +59,8 @@ async fn test_rpc_ocw_circuits_storage_value_invalid_hashes_does_not_panic() {
     assert_err!(
         res,
         DispatchError::Module(ModuleError {
-            index: 2,
-            error: [8, 0, 0, 0],
+            index: 3,
+            error: [9, 0, 0, 0],
             message: Some("IpfsCallError")
         }),
     );
@@ -74,8 +74,8 @@ async fn test_rpc_ocw_circuits_ipfs_down_does_not_panic() {
     assert_err!(
         res,
         DispatchError::Module(ModuleError {
-            index: 2,
-            error: [8, 0, 0, 0],
+            index: 3,
+            error: [9, 0, 0, 0],
             message: Some("IpfsCallError")
         }),
     );
@@ -89,11 +89,22 @@ async fn test_rpc_ocw_circuits_invalid_skcd_does_not_panic() {
     assert_err!(
         res,
         DispatchError::Module(ModuleError {
-            index: 2,
-            error: [9, 0, 0, 0],
+            index: 3,
+            error: [10, 0, 0, 0],
             message: Some("GarblerError")
         }),
     );
+}
+
+/// Fallback to using a RPC if the storage can not be read
+#[tokio::test]
+#[serial_test::serial]
+async fn test_rpc_fallback() {
+    let res = test_garble_and_strip_display_circuits_package_signed(
+        MockType::FallbackStorageNotWorkingInIntegriteeWorker,
+    )
+    .await;
+    assert_ok!(res);
 }
 
 #[tokio::test]

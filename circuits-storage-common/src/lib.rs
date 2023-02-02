@@ -17,9 +17,7 @@ pub struct DisplayStrippedCircuitsPackage {
     // 32 b/c IPFS hash is 256 bits = 32 bytes
     // But due to encoding(??) in practice it is 46 bytes(checked with debugger), and we take some margin
     pub message_pgarbled_cid: BoundedVec<u8, ConstU32<64>>,
-    pub message_packmsg_cid: BoundedVec<u8, ConstU32<64>>,
     pub pinpad_pgarbled_cid: BoundedVec<u8, ConstU32<64>>,
-    pub pinpad_packmsg_cid: BoundedVec<u8, ConstU32<64>>,
     /// needed for UI/UX purposes
     /// Used in repo `wallet-app`; DO NOT remove "pub"!
     pub message_nb_digits: u32,

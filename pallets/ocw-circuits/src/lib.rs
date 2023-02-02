@@ -218,19 +218,17 @@ pub mod pallet {
         }
     }
 
-    impl<T: Config> Pallet<T> {
-        pub fn get_display_circuits_package() -> Result<DisplaySkcdPackage, Error<T>> {
-            let display_circuit_package = <DisplaySkcdPackageValue<T>>::get();
+    pub fn get_display_circuits_package<T: Config>() -> Result<DisplaySkcdPackage, Error<T>> {
+        let display_circuit_package = <DisplaySkcdPackageValue<T>>::get();
 
-            // CHECK: error-out if both fields are not set
-            if display_circuit_package.message_skcd_server_metadata_nb_digits == 0
-                || display_circuit_package.pinpad_skcd_server_metadata_nb_digits == 0
-            {
-                return Err(<Error<T>>::DisplaySkcdPackageValueError);
-            }
-
-            Ok(display_circuit_package)
+        // CHECK: error-out if both fields are not set
+        if display_circuit_package.message_skcd_server_metadata_nb_digits == 0
+            || display_circuit_package.pinpad_skcd_server_metadata_nb_digits == 0
+        {
+            return Err(<Error<T>>::DisplaySkcdPackageValueError);
         }
+
+        Ok(display_circuit_package)
     }
 
     #[pallet::validate_unsigned]
