@@ -11,31 +11,40 @@ mod interstellarpbapicircuits {
     include!("../deps/protos/generated/rust/interstellarpbapicircuits.rs");
 }
 
+#[cfg(test)]
+mod mock;
+
+#[cfg(test)]
+mod tests;
+
+use codec::{Decode, Encode};
+use frame_system::ensure_signed;
+use frame_system::offchain::AppCrypto;
+use frame_system::offchain::CreateSignedTransaction;
+use frame_system::offchain::SendSignedTransaction;
+use frame_system::offchain::Signer;
+use scale_info::prelude::*;
+use serde::Deserialize;
+use sp_core::crypto::KeyTypeId;
+use sp_core::offchain::Duration;
+use sp_runtime::offchain::storage::StorageValueRef;
+use sp_runtime::offchain::storage_lock::BlockAndTime;
+use sp_runtime::offchain::storage_lock::StorageLock;
+use sp_runtime::traits::BlockNumberProvider;
+use sp_runtime::transaction_validity::InvalidTransaction;
+use sp_runtime::RuntimeDebug;
+use sp_std::borrow::ToOwned;
+use sp_std::prelude::*;
+use sp_std::str;
+use sp_std::vec::Vec;
+
 pub use pallet::*;
 
 #[frame_support::pallet]
 pub mod pallet {
-    use codec::{Decode, Encode};
+    use super::*;
     use frame_support::pallet_prelude::*;
-    use frame_system::ensure_signed;
-    use frame_system::offchain::AppCrypto;
-    use frame_system::offchain::CreateSignedTransaction;
-    use frame_system::offchain::SendSignedTransaction;
-    use frame_system::offchain::Signer;
     use frame_system::pallet_prelude::*;
-    use scale_info::prelude::*;
-    use serde::Deserialize;
-    use sp_core::crypto::KeyTypeId;
-    use sp_core::offchain::Duration;
-    use sp_runtime::offchain::storage::StorageValueRef;
-    use sp_runtime::offchain::storage_lock::BlockAndTime;
-    use sp_runtime::offchain::storage_lock::StorageLock;
-    use sp_runtime::traits::BlockNumberProvider;
-    use sp_runtime::transaction_validity::InvalidTransaction;
-    use sp_runtime::RuntimeDebug;
-    use sp_std::borrow::ToOwned;
-    use sp_std::str;
-    use sp_std::vec::Vec;
 
     /// Defines application identifier for crypto keys of this module.
     ///
@@ -99,11 +108,16 @@ pub mod pallet {
     }
 
     #[pallet::config]
-    pub trait Config: frame_system::Config + CreateSignedTransaction<Call<Self>> {
+    pub trait Config: frame_system::Config + CreateSignedTransaction<Call<Self>> + 'static {
         /// The overarching event type.
-        type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
+        type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
         /// The overarching dispatch call type.
-        type Call: From<Call<Self>>;
+        type RuntimeCall: From<Call<Self>>;
+        /// A dispatchable call.
+        // type RuntimeCall: Parameter
+        //     + Dispatchable<RuntimeOrigin = Self::RuntimeOrigin>
+        //     + GetDispatchInfo
+        //     + From<frame_system::Call<Self>>;
         /// The identifier type for an offchain worker.
         type AuthorityId: AppCrypto<Self::Public, Self::Signature>;
     }
@@ -136,9 +150,14 @@ pub mod pallet {
     pub(super) type DisplaySkcdPackageValue<T: Config> =
         StorageValue<_, DisplaySkcdPackage, ValueQuery>;
 
+    /// The current storage version.
+    const STORAGE_VERSION: frame_support::traits::StorageVersion =
+        frame_support::traits::StorageVersion::new(1);
+
     #[pallet::pallet]
     #[pallet::generate_store(pub(super) trait Store)]
-    pub struct Pallet<T>(_);
+    #[pallet::storage_version(STORAGE_VERSION)]
+    pub struct Pallet<T>(PhantomData<T>);
 
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
@@ -169,6 +188,7 @@ pub mod pallet {
         HttpFetchingError,
         DeserializeToObjError,
         DeserializeToStrError,
+        EncodeError,
 
         // get_display_circuits_package(ie pallet_ocw_garble) was called
         // but "DisplaySkcdPackageValue" is not completely set
@@ -198,19 +218,17 @@ pub mod pallet {
         }
     }
 
-    impl<T: Config> Pallet<T> {
-        pub fn get_display_circuits_package() -> Result<DisplaySkcdPackage, Error<T>> {
-            let display_circuit_package = <DisplaySkcdPackageValue<T>>::get();
+    pub fn get_display_circuits_package<T: Config>() -> Result<DisplaySkcdPackage, Error<T>> {
+        let display_circuit_package = <DisplaySkcdPackageValue<T>>::get();
 
-            // CHECK: error-out if both fields are not set
-            if display_circuit_package.message_skcd_server_metadata_nb_digits == 0
-                || display_circuit_package.pinpad_skcd_server_metadata_nb_digits == 0
-            {
-                return Err(<Error<T>>::DisplaySkcdPackageValueError);
-            }
-
-            Ok(display_circuit_package)
+        // CHECK: error-out if both fields are not set
+        if display_circuit_package.message_skcd_server_metadata_nb_digits == 0
+            || display_circuit_package.pinpad_skcd_server_metadata_nb_digits == 0
+        {
+            return Err(<Error<T>>::DisplaySkcdPackageValueError);
         }
+
+        Ok(display_circuit_package)
     }
 
     #[pallet::validate_unsigned]
@@ -233,6 +251,7 @@ pub mod pallet {
 
     #[pallet::call]
     impl<T: Config> Pallet<T> {
+        #[pallet::call_index(0)]
         #[pallet::weight(10000)]
         pub fn submit_config_generic_signed(
             origin: OriginFor<T>,
@@ -250,6 +269,7 @@ pub mod pallet {
             Ok(())
         }
 
+        #[pallet::call_index(1)]
         #[pallet::weight(10000)]
         pub fn submit_config_display_circuits_package_signed(
             origin: OriginFor<T>,
@@ -268,6 +288,7 @@ pub mod pallet {
         /// Called at the end of offchain_worker to publish the result
         /// Not meant to be called by a user
         // TODO use "with signed payload" and check if expected key?
+        #[pallet::call_index(2)]
         #[pallet::weight(10000)]
         pub fn callback_new_skcd_signed(origin: OriginFor<T>, skcd_cid: Vec<u8>) -> DispatchResult {
             let who = ensure_signed(origin)?;
@@ -281,6 +302,7 @@ pub mod pallet {
             Ok(())
         }
 
+        #[pallet::call_index(3)]
         #[pallet::weight(10000)]
         pub fn callback_new_display_circuits_package_signed(
             origin: OriginFor<T>,
@@ -349,12 +371,16 @@ pub mod pallet {
 
     // reply type for each GrpcCallKind
     enum GrpcCallReplyKind {
-        Generic(crate::interstellarpbapicircuits::SkcdGenericFromIpfsReply),
+        Generic {
+            reply: crate::interstellarpbapicircuits::SkcdGenericFromIpfsReply,
+        },
         // one reply for message, one for pinpad
-        Display(
-            crate::interstellarpbapicircuits::SkcdDisplayReply,
-            crate::interstellarpbapicircuits::SkcdDisplayReply,
-        ),
+        Display {
+            message_reply: crate::interstellarpbapicircuits::SkcdDisplayReply,
+            message_nb_digits: u32,
+            pinpad_reply: crate::interstellarpbapicircuits::SkcdDisplayReply,
+            pinpad_nb_digits: u32,
+        },
     }
 
     #[derive(Debug, Deserialize, Encode, Decode, Default)]
@@ -458,7 +484,8 @@ pub mod pallet {
             let input = crate::interstellarpbapicircuits::SkcdGenericFromIpfsRequest {
                 verilog_cid: verilog_cid_str,
             };
-            let body_bytes = ocw_common::encode_body_grpc_web(input);
+            let body_bytes = http_grpc_client::encode_body_grpc_web(&input)
+                .map_err(|_| <Error<T>>::EncodeError)?;
 
             // construct the full endpoint URI using:
             // - dynamic "URI root" from env
@@ -467,31 +494,46 @@ pub mod pallet {
             let uri_root = std::env::var("aaa").unwrap();
             #[cfg(not(feature = "std"))]
             let uri_root = "PLACEHOLDER_no_std";
-            let endpoint = format!("{}{}", uri_root, API_ENDPOINT_GENERIC_URL);
+            let endpoint = format!("{uri_root}{API_ENDPOINT_GENERIC_URL}");
 
-            let (resp_bytes, resp_content_type) = ocw_common::fetch_from_remote_grpc_web(
-                body_bytes,
-                &endpoint,
-                ocw_common::ContentType::GrpcWeb,
-            )
-            .map_err(|e| {
-                log::error!("[ocw-circuits] call_grpc_generic error: {:?}", e);
-                <Error<T>>::HttpFetchingError
-            })?;
+            let (resp_bytes, resp_content_type) =
+                http_grpc_client::sp_offchain_fetch_from_remote_grpc_web(
+                    Some(body_bytes),
+                    &endpoint,
+                    &http_grpc_client::RequestMethod::Post,
+                    Some(&http_grpc_client::ContentType::GrpcWeb),
+                    // Since the "Swanky refactor" this is quite slow; around 45-50s locally
+                    // But add some margin for CI and demos
+                    core::time::Duration::from_millis(120_000),
+                )
+                .map_err(|e| {
+                    log::error!("[ocw-circuits] call_grpc_generic error: {:?}", e);
+                    <Error<T>>::HttpFetchingError
+                })?;
 
             let resp: crate::interstellarpbapicircuits::SkcdGenericFromIpfsReply =
-                ocw_common::decode_body_grpc_web(resp_bytes, resp_content_type);
-            Ok(GrpcCallReplyKind::Generic(resp))
+                http_grpc_client::decode_body_grpc_web(resp_bytes, &resp_content_type).map_err(
+                    |e| {
+                        log::error!("[ocw-circuits] call_grpc_generic error: {:?}", e);
+                        <Error<T>>::DeserializeToObjError
+                    },
+                )?;
+            Ok(GrpcCallReplyKind::Generic { reply: resp })
         }
 
         /// Call the GRPC endpoint API_ENDPOINT_GENERIC_URL, encoding the request as grpc-web, and decoding the response
         ///
-        /// return: a IPFS hash
+        /// return:
+        /// - a IPFS hash
+        /// - the number of digits(that was sent to `api_circuits` in the Request, and SHOULD be "burned in" the Garbled Circuit)
+        ///   NOTE: it is CRITICAL to expose this number of digits(eg via the Storage, or RPC) b/c `pallet-ocw-garble`
+        ///         MUST know it when attempting to garble the circuit to generate the correct number of random digits.
         fn call_grpc_display() -> Result<GrpcCallReplyKind, Error<T>> {
             /// aux function: call API_ENDPOINT_DISPLAY_URL for either is_message or not
             fn call_grpc_display_one<T>(
                 is_message: bool,
-            ) -> Result<crate::interstellarpbapicircuits::SkcdDisplayReply, Error<T>> {
+            ) -> Result<(crate::interstellarpbapicircuits::SkcdDisplayReply, u32), Error<T>>
+            {
                 let input = if is_message {
                     crate::interstellarpbapicircuits::SkcdDisplayRequest {
                         width: DEFAULT_MESSAGE_WIDTH,
@@ -536,7 +578,8 @@ pub mod pallet {
                     }
                 };
 
-                let body_bytes = ocw_common::encode_body_grpc_web(input);
+                let body_bytes = http_grpc_client::encode_body_grpc_web(&input)
+                    .map_err(|_| <Error<T>>::EncodeError)?;
 
                 // construct the full endpoint URI using:
                 // - dynamic "URI root" from env
@@ -545,32 +588,47 @@ pub mod pallet {
                 let uri_root = std::env::var("INTERSTELLAR_URI_ROOT_API_CIRCUITS").unwrap();
                 #[cfg(not(feature = "std"))]
                 let uri_root = "PLACEHOLDER_no_std";
-                let endpoint = format!("{}{}", uri_root, API_ENDPOINT_DISPLAY_URL);
+                let endpoint = format!("{uri_root}{API_ENDPOINT_DISPLAY_URL}");
 
-                let (resp_bytes, resp_content_type) = ocw_common::fetch_from_remote_grpc_web(
-                    body_bytes,
-                    &endpoint,
-                    ocw_common::ContentType::GrpcWeb,
-                )
-                .map_err(|e| {
-                    log::error!("[ocw-circuits] call_grpc_display error: {:?}", e);
-                    <Error<T>>::HttpFetchingError
-                })?;
+                let (resp_bytes, resp_content_type) =
+                    http_grpc_client::sp_offchain_fetch_from_remote_grpc_web(
+                        Some(body_bytes),
+                        &endpoint,
+                        &http_grpc_client::RequestMethod::Post,
+                        Some(&http_grpc_client::ContentType::GrpcWeb),
+                        // Since the "Swanky refactor" this is quite slow; around 45-50s locally
+                        // But add some margin for CI and demos
+                        core::time::Duration::from_millis(120_000),
+                    )
+                    .map_err(|e| {
+                        log::error!("[ocw-circuits] call_grpc_display error: {:?}", e);
+                        <Error<T>>::HttpFetchingError
+                    })?;
 
                 let resp: crate::interstellarpbapicircuits::SkcdDisplayReply =
-                    ocw_common::decode_body_grpc_web(resp_bytes, resp_content_type);
+                    http_grpc_client::decode_body_grpc_web(resp_bytes, &resp_content_type)
+                        .map_err(|e| {
+                            log::error!("[ocw-circuits] call_grpc_generic error: {:?}", e);
+                            <Error<T>>::DeserializeToObjError
+                        })?;
 
-                Ok(resp)
+                // nb_digits: we send in the Request one "BBox" per digit(ie 4 floats)
+                // NOTE: if we are here we can guarantee the C++ has checked it was indeed valid BBox so we can / 4 and this is it
+                Ok((resp, (input.digits_bboxes.len() / 4).try_into().unwrap()))
             }
 
-            let message_reply = call_grpc_display_one::<T>(true);
-            let pinpad_reply = call_grpc_display_one::<T>(false);
+            let (message_reply, message_nb_digits) =
+                call_grpc_display_one::<T>(true).expect("message_reply failed!");
+            let (pinpad_reply, pinpad_nb_digits) =
+                call_grpc_display_one::<T>(false).expect("pinpad_reply failed!");
 
             // TODO pass correct params for pinpad and message
-            Ok(GrpcCallReplyKind::Display(
-                message_reply.expect("message_reply failed!"),
-                pinpad_reply.expect("pinpad_reply failed!"),
-            ))
+            Ok(GrpcCallReplyKind::Display {
+                message_reply,
+                message_nb_digits,
+                pinpad_reply,
+                pinpad_nb_digits,
+            })
         }
 
         /// Called at the end of process_if_needed/offchain_worker
@@ -594,25 +652,20 @@ pub mod pallet {
                     }
 
                     let results = signer.send_signed_transaction(|_account| match &result_reply {
-                        GrpcCallReplyKind::Generic(reply) => Call::callback_new_skcd_signed {
+                        GrpcCallReplyKind::Generic { reply } => Call::callback_new_skcd_signed {
                             skcd_cid: reply.skcd_cid.bytes().collect(),
                         },
-                        GrpcCallReplyKind::Display(message_reply, pinpad_reply) => {
-                            Call::callback_new_display_circuits_package_signed {
-                                message_skcd_cid: message_reply.skcd_cid.bytes().collect(),
-                                message_nb_digits: message_reply
-                                    .server_metadata
-                                    .as_ref()
-                                    .unwrap()
-                                    .nb_digits,
-                                pinpad_skcd_cid: pinpad_reply.skcd_cid.bytes().collect(),
-                                pinpad_nb_digits: pinpad_reply
-                                    .server_metadata
-                                    .as_ref()
-                                    .unwrap()
-                                    .nb_digits,
-                            }
-                        }
+                        GrpcCallReplyKind::Display {
+                            message_reply,
+                            message_nb_digits,
+                            pinpad_reply,
+                            pinpad_nb_digits,
+                        } => Call::callback_new_display_circuits_package_signed {
+                            message_skcd_cid: message_reply.skcd_cid.bytes().collect(),
+                            message_nb_digits: *message_nb_digits,
+                            pinpad_skcd_cid: pinpad_reply.skcd_cid.bytes().collect(),
+                            pinpad_nb_digits: *pinpad_nb_digits,
+                        },
                     });
 
                     log::info!(

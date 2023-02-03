@@ -1,0 +1,10 @@
+/target
+/Cargo.lock
+
+/.vscode
+
+/*.png
+
+# profiling
+/callgrind.out.*
+/profile.coz*

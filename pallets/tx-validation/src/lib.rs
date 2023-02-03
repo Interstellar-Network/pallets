@@ -23,8 +23,8 @@ pub mod pallet {
     /// Configure the pallet by specifying the parameters and types on which it depends.
     #[pallet::config]
     pub trait Config: frame_system::Config + 'static {
-        /// Because this pallet emits events, it depends on the runtime's definition of an event.
-        type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
+        /// The overarching event type.
+        type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
     }
 
     // TODO proper structs instead of tuples for the StorageMap(both key and value)
@@ -126,9 +126,14 @@ pub mod pallet {
         // ValueQuery,
     >;
 
+    /// The current storage version.
+    const STORAGE_VERSION: frame_support::traits::StorageVersion =
+        frame_support::traits::StorageVersion::new(1);
+
     #[pallet::pallet]
     #[pallet::generate_store(pub(super) trait Store)]
-    pub struct Pallet<T>(_);
+    #[pallet::storage_version(STORAGE_VERSION)]
+    pub struct Pallet<T>(PhantomData<T>);
 
     // Pallets use events to inform users when important changes are made.
     // https://docs.substrate.io/v3/runtime/events-and-errors
@@ -155,8 +160,6 @@ pub mod pallet {
     pub enum Error<T> {
         // The given ipfs_cid was NOT present in CircuitServerMetadataMap
         CircuitNotFound,
-        // wrong OTP/permutation given -> Transaction failed
-        TxWrongCodeGiven,
         // inputs SHOULD be [0;9] or ['0';'9']
         // and inputs length MUST match expected length
         TxInvalidInputsGiven,
@@ -214,7 +217,8 @@ pub mod pallet {
     impl<T: Config> Pallet<T> {
         // TODO remove call? how to properly handle calling store_metadata_aux from pallet-ocw-garble???
         // NOTE: this is needed only for tests...
-        #[pallet::weight(10_000 + T::DbWeight::get().writes(1))]
+        #[pallet::call_index(0)]
+        #[pallet::weight(10_000)] // TODO + T::DbWeight::get().writes(1)
         pub fn store_metadata(
             origin: OriginFor<T>,
             message_pgarbled_cid: Vec<u8>,
@@ -231,7 +235,8 @@ pub mod pallet {
 
         // NOTE: for now this extrinsic is called from the front-end so input_digits is ascii
         // ie when giving "35" in the text box, we get [51,53]
-        #[pallet::weight(10_000 + T::DbWeight::get().writes(1))]
+        #[pallet::call_index(1)]
+        #[pallet::weight(10_000)] // TODO + T::DbWeight::get().writes(1)
         pub fn check_input(
             origin: OriginFor<T>,
             ipfs_cid: Vec<u8>,
@@ -299,14 +304,19 @@ pub mod pallet {
             // TODO remove the key from the map; we DO NOT want to allow retrying
             if display_validation_package.message_digits == computed_inputs_from_permutation {
                 log::info!("[tx-validation] TxPass",);
-                Self::deposit_event(Event::TxPass { account_id: who });
+                crate::Pallet::<T>::deposit_event(Event::TxPass { account_id: who });
                 // TODO on success: call next step/callback (ie pallet-tx-XXX)
-                Ok(())
             } else {
                 log::info!("[tx-validation] TxFail",);
-                Self::deposit_event(Event::TxFail { account_id: who });
-                Err(Error::<T>::TxWrongCodeGiven.into())
+                crate::Pallet::<T>::deposit_event(Event::TxFail { account_id: who });
+                // DO NOT return an Err; that would rollback the tx and allow the user to retry
+                // this is NOT what we want!
+                // We only want to retry if the input are invalid(eg not in [0-9]) NOT if a wrong code is given
+                //
+                // TODO in this case we SHOULD NOT allow the user to retry; ie cleanup Storage etc
             }
+
+            Ok(())
         }
     }
 }

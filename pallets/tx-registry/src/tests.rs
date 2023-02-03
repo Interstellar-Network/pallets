@@ -9,7 +9,7 @@ fn store_tx_result_txpass_ok() {
         let account_id = 1;
         let ipfs_cid = vec![1, 2];
         assert_ok!(TxRegistry::store_tx_result(
-            Origin::signed(account_id),
+            RuntimeOrigin::signed(account_id),
             ipfs_cid.clone(),
             crate::TxResult::TxPass,
         ));
@@ -29,7 +29,7 @@ fn store_tx_result_txfail_ok() {
         let account_id = 1;
         let ipfs_cid = vec![1, 2];
         assert_ok!(TxRegistry::store_tx_result(
-            Origin::signed(account_id),
+            RuntimeOrigin::signed(account_id),
             ipfs_cid.clone(),
             crate::TxResult::TxFail,
         ));
@@ -50,14 +50,14 @@ fn store_tx_result_multiple_ok() {
         let account_id = 1;
         let ipfs_cid_1 = vec![1, 2];
         assert_ok!(TxRegistry::store_tx_result(
-            Origin::signed(account_id),
+            RuntimeOrigin::signed(account_id),
             ipfs_cid_1.clone(),
             crate::TxResult::TxPass,
         ));
 
         let ipfs_cid_2 = vec![3, 4];
         assert_ok!(TxRegistry::store_tx_result(
-            Origin::signed(account_id),
+            RuntimeOrigin::signed(account_id),
             ipfs_cid_2.clone(),
             crate::TxResult::TxFail,
         ));

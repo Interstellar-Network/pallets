@@ -57,9 +57,14 @@ pub mod pallet {
     pub(super) type TxResultsMap<T: Config> =
         StorageMap<_, Blake2_128, T::AccountId, BoundedVec<TxResultPackage, ConstU32<16>>>;
 
+    /// The current storage version.
+    const STORAGE_VERSION: frame_support::traits::StorageVersion =
+        frame_support::traits::StorageVersion::new(1);
+
     #[pallet::pallet]
     #[pallet::generate_store(pub(super) trait Store)]
-    pub struct Pallet<T>(_);
+    #[pallet::storage_version(STORAGE_VERSION)]
+    pub struct Pallet<T>(PhantomData<T>);
 
     #[derive(
         Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, scale_info::TypeInfo, MaxEncodedLen,
@@ -99,7 +104,7 @@ pub mod pallet {
         // "append if exists, create if not"
         // TODO done in two steps, is there a way to do it atomically?
         let mut current_tx_history: TxResultsType =
-            <TxResultsMap<T>>::try_get(&who).unwrap_or_default();
+            <TxResultsMap<T>>::try_get(who).unwrap_or_default();
         current_tx_history
             .try_push(TxResultPackage {
                 message_pgarbled_cid: TryInto::<BoundedVec<u8, ConstU32<64>>>::try_into(
@@ -113,7 +118,7 @@ pub mod pallet {
 
         log::info!(
             "[tx-registry] store_tx_result: done! [{:?}]",
-            <TxResultsMap<T>>::try_get(&who).unwrap_or_default()
+            <TxResultsMap<T>>::try_get(who).unwrap_or_default()
         );
 
         Ok(())
@@ -127,7 +132,9 @@ pub mod pallet {
         /// IMPORTANT: directly calling "fn store_tx_result"(not the Call) or directly modifying the Storage
         /// from the `integritee-worker` DOES NOT work.
         /// To be able to sync from sidechain/enclave -> parentchain, it MUST go through a Call
-        #[pallet::weight(10_000 + T::DbWeight::get().writes(1))]
+        //TODO #[pallet::weight(10_000 + T::WeightInfo::get().writes(1))]
+        #[pallet::call_index(0)]
+        #[pallet::weight(10_000)]
         pub fn store_tx_result(
             origin: OriginFor<T>,
             message_pgarbled_cid: Vec<u8>,

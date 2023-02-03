@@ -15,15 +15,15 @@ targets = ["x86_64-unknown-linux-gnu"]
 
 [dependencies]
 log = { version = "0.4", default-features = false }
-serde = { version = '1.0.130', default-features = false, features = ['derive'] }
-serde_json = { version = '1.0.67', default-features = false, features = ['alloc'] }
+serde = { version = "1.0", default-features = false, features = ['derive'] }
+serde_json = { version = "1", default-features = false, features = ['alloc'] }
 
 # https://github.com/tokio-rs/prost#using-prost-in-a-no_std-crate
 prost = { version = "0.11", default-features = false, features = ["prost-derive"] }
 # "Only necessary if using Protobuf well-known types:"
 prost-types = { version = "0.11", default-features = false }
 
-ocw-common = { path = "../../ocw-common", default-features = false }
+http-grpc-client = { default-features = false, features = ["with_sp_offchain"], git = "https://github.com/Interstellar-Network/rs-common.git", branch = "main" }
 
 # prost: could not find a way to use encode() in no_std context...
 # = note: the lang item is first defined in crate `std` (which `byteorder` depends on)
@@ -31,19 +31,20 @@ ocw-common = { path = "../../ocw-common", default-features = false }
 # quick-protobuf = { version = "0.8.0", default-features = false }
 # quick-protobuf = "0.8.0"
 
-codec = { package = "parity-scale-codec", version = "^3.1", default-features = false, features = [
+codec = { package = "parity-scale-codec", version = "3", default-features = false, features = [
 	"derive",
 ] }
-scale-info = { version = "2.0.1", default-features = false, features = ["derive"] }
-frame-support = { default-features = false, version = "4.0.0-dev", git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.27"}
-frame-system = { default-features = false, version = "4.0.0-dev", git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.27" }
-frame-benchmarking = { default-features = false, version = "4.0.0-dev", git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.27", optional = true }
+scale-info = { version = "2", default-features = false, features = ["derive"] }
+frame-support = { default-features = false, version = "4.0.0-dev", git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.36"}
+frame-system = { default-features = false, version = "4.0.0-dev", git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.36" }
+frame-benchmarking = { default-features = false, version = "4.0.0-dev", git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.36", optional = true }
 
-sp-core = { default-features = false, version = "6.0.0", git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.27" }
-sp-io = { default-features = false, version = "6.0.0", git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.27" }
-sp-runtime = { version = "6.0.0", default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.27" }
-sp-keystore = { default-features = false, version = "0.12.0", git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.27", optional = true }
-sp-std = { default-features = false, version = "4.0.0", git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.27" }
+sp-core = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.36" }
+sp-io = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.36" }
+sp-runtime = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.36" }
+sp-std = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.36" }
+
+sp-keystore = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.36", optional = true }
 
 [features]
 default = ["std"]
@@ -55,11 +56,14 @@ std = [
 	"frame-benchmarking/std",
 	"sp-core/std",
 	"sp-io/std",
-	"sp-keystore",
 	"sp-runtime/std",
 	"sp-std/std",
 	"log/std",
-	"ocw-common/std",
+	"sp-keystore/std",
+	"http-grpc-client/std",
+]
+sgx = [
+	"http-grpc-client/sgx",
 ]
 runtime-benchmarks = ["frame-benchmarking/runtime-benchmarks"]
 try-runtime = ["frame-support/try-runtime"]
@@ -69,3 +73,7 @@ try-runtime = ["frame-support/try-runtime"]
 
 # pb-rs = "0.9.1"
 # walkdir = "2.3.2"
+
+[dev-dependencies]
+env_logger = "0.10.0"
+test-log = "0.2"

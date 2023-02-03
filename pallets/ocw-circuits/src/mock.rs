@@ -1,10 +1,14 @@
-use crate as pallet_tx_validation;
-use frame_support::traits::{ConstU16, ConstU64};
-use frame_system as system;
-use sp_core::H256;
+use crate as pallet_ocw_circuits;
+use crate::*;
+use frame_support::{
+    parameter_types,
+    traits::{ConstU32, ConstU64},
+};
+use sp_core::{sr25519::Signature, H256};
+
 use sp_runtime::{
-    testing::Header,
-    traits::{BlakeTwo256, IdentityLookup},
+    testing::{Header, TestXt},
+    traits::{BlakeTwo256, Extrinsic as ExtrinsicT, IdentifyAccount, IdentityLookup, Verify},
 };
 
 type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
@@ -18,11 +22,11 @@ frame_support::construct_runtime!(
         UncheckedExtrinsic = UncheckedExtrinsic,
     {
         System: frame_system::{Pallet, Call, Config, Storage, Event<T>},
-        TxValidation: pallet_tx_validation,
+        PalletOcwCircuits: pallet_ocw_circuits,
     }
 );
 
-impl system::Config for Test {
+impl frame_system::Config for Test {
     type BaseCallFilter = frame_support::traits::Everything;
     type BlockWeights = ();
     type BlockLength = ();
@@ -33,7 +37,8 @@ impl system::Config for Test {
     type BlockNumber = u64;
     type Hash = H256;
     type Hashing = BlakeTwo256;
-    type AccountId = u64;
+    type AccountId = sp_core::sr25519::Public;
+    // type AccountId = u64;
     type Lookup = IdentityLookup<Self::AccountId>;
     type Header = Header;
     type RuntimeEvent = RuntimeEvent;
@@ -44,13 +49,49 @@ impl system::Config for Test {
     type OnNewAccount = ();
     type OnKilledAccount = ();
     type SystemWeightInfo = ();
-    type SS58Prefix = ConstU16<42>;
+    type SS58Prefix = ();
     type OnSetCode = ();
-    type MaxConsumers = frame_support::traits::ConstU32<16>;
+    type MaxConsumers = ConstU32<16>;
 }
 
-impl pallet_tx_validation::Config for Test {
+type Extrinsic = TestXt<RuntimeCall, ()>;
+type AccountId = <<Signature as Verify>::Signer as IdentifyAccount>::AccountId;
+
+impl frame_system::offchain::SigningTypes for Test {
+    type Public = <Signature as Verify>::Signer;
+    type Signature = Signature;
+}
+
+impl<LocalCall> frame_system::offchain::SendTransactionTypes<LocalCall> for Test
+where
+    RuntimeCall: From<LocalCall>,
+{
+    type OverarchingCall = RuntimeCall;
+    type Extrinsic = Extrinsic;
+}
+
+impl<LocalCall> frame_system::offchain::CreateSignedTransaction<LocalCall> for Test
+where
+    RuntimeCall: From<LocalCall>,
+{
+    fn create_transaction<C: frame_system::offchain::AppCrypto<Self::Public, Self::Signature>>(
+        call: RuntimeCall,
+        _public: <Signature as Verify>::Signer,
+        _account: AccountId,
+        nonce: u64,
+    ) -> Option<(RuntimeCall, <Extrinsic as ExtrinsicT>::SignaturePayload)> {
+        Some((call, (nonce, ())))
+    }
+}
+
+parameter_types! {
+    pub const UnsignedPriority: u64 = 1 << 20;
+}
+
+impl pallet_ocw_circuits::Config for Test {
     type RuntimeEvent = RuntimeEvent;
+    type RuntimeCall = RuntimeCall;
+    type AuthorityId = crypto::TestAuthId;
 }
 
 // Build genesis storage according to the mock runtime.
@@ -63,7 +104,7 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
     let t = frame_system::GenesisConfig::default()
         .build_storage::<Test>()
         .unwrap();
-    // pallet_tx_validation::GenesisConfig::<Test> {
+    // pallet_mobile_registry::GenesisConfig::<Test> {
     //     balances: vec![(1, 10), (2, 10), (3, 10), (4, 10), (5, 2)],
     // }
     // .assimilate_storage(&mut t)

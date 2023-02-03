@@ -1,7 +1,6 @@
 use crate::{mock::*, Error};
-use frame_support::assert_ok;
-use frame_support::pallet_prelude::ConstU32;
-use frame_support::{assert_err, assert_noop, BoundedVec};
+use frame_support::{assert_noop, assert_ok};
+use test_log::test;
 
 fn test_register_mobile_ok(pub_key: Vec<u8>) {
     new_test_ext().execute_with(|| {
@@ -9,7 +8,7 @@ fn test_register_mobile_ok(pub_key: Vec<u8>) {
 
         // Dispatch a signed extrinsic.
         assert_ok!(MobileRegistry::register_mobile(
-            Origin::signed(account_id),
+            RuntimeOrigin::signed(account_id),
             pub_key
         ));
         System::assert_last_event(crate::Event::NewMobileRegistered { account_id: 1 }.into());
@@ -41,7 +40,7 @@ fn test_register_mobile_pub_key_too_small_err() {
         // Dispatch a signed extrinsic.
         // Ensure the expected error is thrown if a wrong input is given
         assert_noop!(
-            MobileRegistry::register_mobile(Origin::signed(account_id), vec![0, 1]),
+            MobileRegistry::register_mobile(RuntimeOrigin::signed(account_id), vec![0, 1]),
             Error::<Test>::InvalidKeySize
         );
     });
