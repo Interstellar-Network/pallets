@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "circuits-storage-common",
+    "pallets/eth-signer",
     "pallets/mobile-registry",
     "pallets/ocw-circuits",
     "pallets/ocw-garble",
