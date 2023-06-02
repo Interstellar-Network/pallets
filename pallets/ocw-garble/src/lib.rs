@@ -557,8 +557,9 @@ pub mod pallet {
         }
     }
 
-    #[derive(Debug, Deserialize, Encode, Decode)]
+    #[derive(Debug, Deserialize, Encode, Decode, Default)]
     enum GrpcCallKind {
+        #[default]
         GarbleStandard,
         GarbleAndStrip,
     }
@@ -574,12 +575,6 @@ pub mod pallet {
             crate::GarbleAndStripIpfsReply,
             Vec<u8>,
         ),
-    }
-
-    impl Default for GrpcCallKind {
-        fn default() -> Self {
-            GrpcCallKind::GarbleStandard
-        }
     }
 
     #[derive(Debug, Deserialize, Encode, Decode, Default)]

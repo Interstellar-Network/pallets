@@ -67,18 +67,21 @@ pub mod pallet {
     pub struct Pallet<T>(PhantomData<T>);
 
     #[derive(
-        Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, scale_info::TypeInfo, MaxEncodedLen,
+        Clone,
+        Encode,
+        Decode,
+        Eq,
+        PartialEq,
+        RuntimeDebug,
+        scale_info::TypeInfo,
+        MaxEncodedLen,
+        Default,
     )]
     pub enum TxResult {
         /// One of those is emitted at the end of the tx validation
         TxPass,
+        #[default]
         TxFail,
-    }
-
-    impl Default for TxResult {
-        fn default() -> Self {
-            TxResult::TxFail
-        }
     }
 
     // Errors inform users that something went wrong.

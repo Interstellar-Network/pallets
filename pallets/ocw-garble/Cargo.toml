@@ -33,7 +33,7 @@ pallet-ocw-circuits = { path = "../ocw-circuits", default-features = false }
 pallet-tx-validation = { path = "../tx-validation", default-features = false }
 circuits-storage-common = { path = "../../circuits-storage-common", default-features = false }
 # TODO TOREMOVE
-pallet-timestamp = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.36"}
+pallet-timestamp = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.39"}
 lib-garble-rs = { git = "https://github.com/Interstellar-Network/lib-garble-rs.git", branch = "main", default-features = false }
 ipfs-client-http-req = { git = "https://github.com/Interstellar-Network/lib-garble-rs.git", branch = "main", default-features = false }
 
@@ -47,15 +47,15 @@ codec = { package = "parity-scale-codec", version = "3", default-features = fals
 	"derive",
 ] }
 scale-info = { version = "2", default-features = false, features = ["derive"] }
-frame-support = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.36"}
-frame-system = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.36" }
-frame-benchmarking = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.36", optional = true }
+frame-support = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.39"}
+frame-system = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.39" }
+frame-benchmarking = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.39", optional = true }
 
-sp-core = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.36" }
-sp-io = { optional = true, default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.36" }
-sp-runtime = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.36" }
-sp-keystore = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.36", optional = true }
-sp-std = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.36" }
+sp-core = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.39" }
+sp-io = { optional = true, default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.39" }
+sp-runtime = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.39" }
+sp-keystore = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.39", optional = true }
+sp-std = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.39" }
 
 sgx_tstd = { branch = "master", git = "https://github.com/apache/teaclave-sgx-sdk.git", optional = true }
 
@@ -65,7 +65,7 @@ sgx_tstd = { branch = "master", git = "https://github.com/apache/teaclave-sgx-sd
 # itp-types = { default-features = false, git = "https://github.com/integritee-network/pallets.git", branch = "master" }
 # itp-utils = { default-features = false, git = "https://github.com/integritee-network/pallets.git", branch = "master" }
 #
-# substrate-api-client = { git = "https://github.com/scs/substrate-api-client", branch = "polkadot-v0.9.36" }
+# substrate-api-client = { git = "https://github.com/scs/substrate-api-client", branch = "polkadot-v0.9.39" }
 
 [features]
 default = ["std"]
@@ -117,7 +117,7 @@ try-runtime = ["frame-support/try-runtime"]
 [dev-dependencies]
 env_logger = "0.10"
 test-log = "0.2"
-serial_test = "1.0.0"
+serial_test = "2"
 
 tests-utils = { default-features = false, git = "https://github.com/Interstellar-Network/rs-common.git", branch = "main" }
 httpmock = "0.6"
