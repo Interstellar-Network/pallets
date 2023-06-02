@@ -357,16 +357,11 @@ pub mod pallet {
         }
     }
 
-    #[derive(Debug, Deserialize, Encode, Decode)]
+    #[derive(Debug, Deserialize, Encode, Decode, Default)]
     enum GrpcCallKind {
+        #[default]
         Generic,
         Display,
-    }
-
-    impl Default for GrpcCallKind {
-        fn default() -> Self {
-            GrpcCallKind::Generic
-        }
     }
 
     // reply type for each GrpcCallKind
