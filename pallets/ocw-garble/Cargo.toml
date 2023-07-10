@@ -1,6 +1,6 @@
 [package]
 name = "pallet-ocw-garble"
-version = "4.0.0-dev"
+version = "5.0.0"
 edition = "2021"
 authors = ['Substrate DevHub <https://github.com/substrate-developer-hub>']
 repository = "https://github.com/jimmychu0807/substrate-offchain-worker-demo"
@@ -34,7 +34,7 @@ pallet-tx-validation = { path = "../tx-validation", default-features = false }
 circuits-storage-common = { path = "../../circuits-storage-common", default-features = false }
 # TODO TOREMOVE
 pallet-timestamp = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.39"}
-lib-garble-rs = { git = "https://github.com/Interstellar-Network/lib-garble-rs.git", branch = "main", default-features = false }
+lib-garble-rs = { version = "2.0.0", git = "https://github.com/Interstellar-Network/lib-garble-rs.git", branch = "main", default-features = false }
 ipfs-client-http-req = { git = "https://github.com/Interstellar-Network/lib-garble-rs.git", branch = "main", default-features = false }
 
 # prost: could not find a way to use encode() in no_std context...
