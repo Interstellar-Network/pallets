@@ -22,3 +22,17 @@ pub struct DisplayStrippedCircuitsPackage {
     /// Used in repo `wallet-app`; DO NOT remove "pub"!
     pub message_nb_digits: u32,
 }
+
+/// Easy way to make a link b/w a "message" and "pinpad" circuits
+/// that way we can have ONE extrinsic that generates both in one call
+#[derive(
+    Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, Default, scale_info::TypeInfo, MaxEncodedLen,
+)]
+pub struct DisplaySkcdPackage {
+    // 32 b/c IPFS hash is 256 bits = 32 bytes
+    // But due to encoding(??) in practice it is 46 bytes(checked with debugger), and we take some margin
+    pub message_skcd_cid: BoundedVec<u8, ConstU32<64>>,
+    pub message_skcd_server_metadata_nb_digits: u32,
+    pub pinpad_skcd_cid: BoundedVec<u8, ConstU32<64>>,
+    pub pinpad_skcd_server_metadata_nb_digits: u32,
+}

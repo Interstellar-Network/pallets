@@ -1,6 +1,6 @@
 [package]
 name = "pallet-ocw-circuits"
-version = "4.0.0-dev"
+version = "6.0.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 edition = "2021"
 license = "Unlicense"
@@ -15,27 +15,17 @@ targets = ["x86_64-unknown-linux-gnu"]
 
 [dependencies]
 log = { version = "0.4", default-features = false }
-serde = { version = "1.0", default-features = false, features = ['derive'] }
-serde_json = { version = "1", default-features = false, features = ['alloc'] }
 
-# https://github.com/tokio-rs/prost#using-prost-in-a-no_std-crate
-prost = { version = "0.11", default-features = false, features = ["prost-derive"] }
-# "Only necessary if using Protobuf well-known types:"
-prost-types = { version = "0.11", default-features = false }
-
-http-grpc-client = { default-features = false, features = ["with_sp_offchain"], git = "https://github.com/Interstellar-Network/rs-common.git", branch = "main" }
-
-# prost: could not find a way to use encode() in no_std context...
-# = note: the lang item is first defined in crate `std` (which `byteorder` depends on)
-# = note: first definition in `std` loaded from /home/pratn/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/wasm32-unknown-unknown/lib/libstd-d9a8e4ca4a56d589.rlib
-# quick-protobuf = { version = "0.8.0", default-features = false }
-# quick-protobuf = "0.8.0"
+interstellar-ipfs-client = { git = "https://github.com/Interstellar-Network/rs-common.git", branch = "main", default-features = false, features = [
+	"with_sp_offchain",
+], version = "^0.5" }
+circuits-storage-common = { path = "../../circuits-storage-common", default-features = false }
 
 codec = { package = "parity-scale-codec", version = "3", default-features = false, features = [
 	"derive",
 ] }
 scale-info = { version = "2", default-features = false, features = ["derive"] }
-frame-support = { default-features = false, version = "4.0.0-dev", git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.39"}
+frame-support = { default-features = false, version = "4.0.0-dev", git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.39" }
 frame-system = { default-features = false, version = "4.0.0-dev", git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.39" }
 frame-benchmarking = { default-features = false, version = "4.0.0-dev", git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.39", optional = true }
 
@@ -45,6 +35,19 @@ sp-runtime = { default-features = false, git = "https://github.com/paritytech/su
 sp-std = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.39" }
 
 sp-keystore = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.39", optional = true }
+
+# MUST NOT try to compile "lib_circuits" for WASM
+# 	CXX include path:
+#   	/home/aaa/workspace/interstellar/integritee-node/target/debug/wbuild/integritee-node-runtime/target/wasm32-unknown-unknown/release/build/circuit-gen-rs-234ffc1b9bc36ac1/out/cxxbridge/include
+#   	/home/aaa/workspace/interstellar/integritee-node/target/debug/wbuild/integritee-node-runtime/target/wasm32-unknown-unknown/release/build/circuit-gen-rs-234ffc1b9bc36ac1/out/cxxbridge/crate
+# 	System is unknown to cmake, create:
+# 	Platform/unknown to use this system, please post your config file on discourse.cmake.org so it can be added to c
+# cf repo "integritee-node"
+[target.'cfg(not(target_family = "wasm"))'.dependencies]
+# IMPORTANT: "pallet-ocw-garble" depends on "pallet-ocw-circuits" for Storate purposes; but we SHOULD not pull "circuit-gen-rs" unless needed
+circuit-gen-rs = { version = "0.1.0", git = "https://github.com/Interstellar-Network/lib_circuits.git", default-features = false, features = [
+	"alloc",
+], optional = true }
 
 [features]
 default = ["std"]
@@ -60,20 +63,26 @@ std = [
 	"sp-std/std",
 	"log/std",
 	"sp-keystore/std",
-	"http-grpc-client/std",
+	"circuit-gen-rs?/std",
+	"interstellar-ipfs-client/std",
+	"circuits-storage-common/std",
 ]
-sgx = [
-	"http-grpc-client/sgx",
-]
+sgx = ["circuit-gen-rs?/alloc", "interstellar-ipfs-client/sgx"]
+circuit-gen-rs = ["dep:circuit-gen-rs"]
 runtime-benchmarks = ["frame-benchmarking/runtime-benchmarks"]
 try-runtime = ["frame-support/try-runtime"]
 
 [build-dependencies]
-# prost-build = "0.11"
-
 # pb-rs = "0.9.1"
 # walkdir = "2.3.2"
 
 [dev-dependencies]
 env_logger = "0.10.0"
 test-log = "0.2"
+serial_test = "2"
+tokio = { version = "*", default-features = false, features = ["rt", "macros"] }
+futures = "0.3"
+
+interstellar-http-client = { default-features = false, git = "https://github.com/Interstellar-Network/rs-common.git", branch = "main", features = [
+	"with_sp_offchain",
+], version = "^0.5" }

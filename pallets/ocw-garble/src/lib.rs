@@ -27,6 +27,9 @@ use sp_std::borrow::ToOwned;
 use sp_std::str;
 use sp_std::vec::Vec;
 
+use interstellar_http_client::SendRequest;
+use interstellar_ipfs_client::IpfsClient;
+
 pub use pallet::*;
 
 // TODO(interstellar) remove; and cascade
@@ -35,7 +38,10 @@ struct GarbleAndStripIpfsReply {
 }
 
 /// TEST ONLY "hook"
+/// Because the tests need the full body bytes to mock correctly...
+///
 /// cf https://github.com/paritytech/substrate/pull/12307/files
+///
 #[cfg(test)]
 pub trait MyTestCallback {
     fn my_test_hook(input: Vec<u8>) -> Vec<u8> {
@@ -108,9 +114,7 @@ pub mod pallet {
         + CreateSignedTransaction<Call<Self>>
         + pallet_ocw_circuits::Config
         + pallet_tx_validation::Config
-        + 'static
-    // TODO? + pallet_ocw_circuits::Config
-    // TODO TOREMOVE
+        + 'static // TODO TOREMOVE
     // + pallet_timestamp::Config
     {
         /// The overarching event type.
@@ -256,7 +260,7 @@ pub mod pallet {
         ///     -> issue with sgx_tstd + std]
         /// cf https://github.com/scs/substrate-api-client/blob/master/examples/example_get_storage.rs
         fn get_ocw_circuits_storage_value_rpc(
-        ) -> Result<pallet_ocw_circuits::DisplaySkcdPackage, Error<T>> {
+        ) -> Result<circuits_storage_common::DisplaySkcdPackage, Error<T>> {
             // TODO? use proper struct to encode the request
             let body_json = json!({
                 "jsonrpc": "2.0",
@@ -271,11 +275,11 @@ pub mod pallet {
             let endpoint = get_node_uri();
 
             let (resp_bytes, resp_content_type) =
-                http_grpc_client::http_req_fetch_from_remote_grpc_web(
+                interstellar_http_client::ClientHttpReq::send_request(
                     Some(bytes::Bytes::from(serde_json::to_vec(&body_json).unwrap())),
                     &endpoint,
-                    &http_grpc_client::RequestMethod::Post,
-                    Some(&http_grpc_client::ContentType::Json),
+                    &interstellar_http_client::MyRequestMethod::Post,
+                    Some(&interstellar_http_client::MyContentType::Json),
                     core::time::Duration::from_millis(2_000),
                 )
                 .map_err(|e| {
@@ -287,13 +291,12 @@ pub mod pallet {
                     <Error<T>>::HttpFetchingError
                 })?;
 
-            let response: pallet_ocw_circuits::DisplaySkcdPackage =
-                http_grpc_client::decode_rpc_json(&resp_bytes, &resp_content_type).map_err(
-                    |e| {
+            let response: circuits_storage_common::DisplaySkcdPackage =
+                interstellar_http_client::decode_rpc_json(&resp_bytes, &resp_content_type)
+                    .map_err(|e| {
                         log::error!("[ocw-circuits] call_grpc_generic error: {:?}", e);
                         <Error<T>>::DeserializeError
-                    },
-                )?;
+                    })?;
             log::info!(
                 "[ocw-garble] get_ocw_circuits_storage_value response : {:?}",
                 response
@@ -309,7 +312,7 @@ pub mod pallet {
         ///
         /// 2023-02-02: still broken? cf https://github.com/Interstellar-Network/roadmap/issues/73
         fn get_ocw_circuits_storage_value(
-        ) -> Result<pallet_ocw_circuits::DisplaySkcdPackage, Error<T>> {
+        ) -> Result<circuits_storage_common::DisplaySkcdPackage, Error<T>> {
             match pallet_ocw_circuits::get_display_circuits_package::<T>() {
                 Ok(circuit) => Ok(circuit),
                 Err(_) => {
@@ -577,20 +580,6 @@ pub mod pallet {
         ),
     }
 
-    #[derive(Debug, Deserialize, Encode, Decode, Default)]
-    struct IndexingData {
-        block_number: u32,
-        grpc_kind: GrpcCallKind,
-        // optional: only if GrpcCallKind::GarbleStandard
-        skcd_ipfs_cid: Option<Vec<u8>>,
-        // optional: only if GrpcCallKind::GarbleAndStrip
-        message_skcd_ipfs_cid: Option<Vec<u8>>,
-        pinpad_skcd_ipfs_cid: Option<Vec<u8>>,
-        tx_msg: Option<Vec<u8>>,
-        message_digits: Option<Vec<u8>>,
-        pinpad_digits: Option<Vec<u8>>,
-    }
-
     impl<T: Config> Pallet<T> {
         /// Regroup the 2 calls to API_ENDPOINT_GARBLE_STRIP_URL in one
         fn call_grpc_garble_and_strip(
@@ -733,8 +722,8 @@ pub mod pallet {
             .map_err(|_err| <Error<T>>::Utf8Error)?
             .to_owned();
 
-        let ipfs_client =
-            ipfs_client_http_req::IpfsClient::new(&get_ipfs_uri()).map_err(|err| {
+        let ipfs_client = interstellar_ipfs_client::IpfsClientHttpReq::new(&get_ipfs_uri())
+            .map_err(|err| {
                 log::error!("[ocw-garble] ipfs client new error: {:?}", err);
                 <Error<T>>::IpfsClientCreationError
             })?;
