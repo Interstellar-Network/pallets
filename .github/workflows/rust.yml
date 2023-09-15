@@ -6,25 +6,51 @@ on:
 jobs:
   ##############################################################################
   ##############################################################################
-  # TODO split test and lint; but that REQUIRE caching else recompile from scratch in between
   rust:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # TODO: "with_sp_offchain": requires to setup a Mock Substrate runtime so for now we skip it
+        # This is not ideal, but this repo is tested as part of the others(mostly "pallets") so...
+        # NOTE: https://github.com/orgs/community/discussions/25246
+        # -> "uses" CAN NOT use a property so we use a bool instead...
+        rust_args:
+          [
+            {
+              is_lint: "true",
+              features: "circuit-gen-rs",
+              test_args: "-p pallet-ocw-circuits",
+            },
+            { is_lint: "true", features: "", test_args: "" },
+            {
+              is_lint: "",
+              features: "circuit-gen-rs",
+              test_args: "-p pallet-ocw-circuits",
+            },
+            { is_lint: "", features: "", test_args: "" },
+          ]
     steps:
       ##########################################################################
+
+      # install build dependencies
+      # cf https://github.com/Interstellar-Network/lib_circuits/blob/66d1a4ab44c2cf98030d95492f71cc845bd441b7/.github/workflows/rust.yml
+      # MUST match the same step in Dockerfile
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y libboost-filesystem-dev libpng-dev
+      - name: install "internal" dependencies
+        # TODO yosys: use proper Release build
+        run: |
+          wget https://github.com/Interstellar-Network/yosys/releases/download/yosys-0.29/yosys-0.1.29-Linux.deb -O yosys.deb
+          sudo apt-get install -y --no-install-recommends ./yosys.deb
+          wget https://github.com/Interstellar-Network/abc/releases/download/0.2.0/abc-0.1.1-Linux.deb -O abc.deb
+          sudo apt-get install -y --no-install-recommends ./abc.deb
+
       # This is pretty dumb: we MUST call action/checkout BEFORE using a local action...
       # else: Error: Can't find 'action.yml', 'action.yaml' or 'Dockerfile' under '/home/runner/work/rs-common/rs-common/.github/actions/setup'. Did you forget to run actions/checkout before running your local action?
       - uses: Interstellar-Network/gh-actions/prepare@v3-dev
         with:
           ssh_key_input: ${{ secrets.SSH_KEY_MACHINE_USER_INTERSTELLAR_CI }}
-          install_cmake_and_ninja: false
-
-      ##########################################################################
-
-      - uses: Interstellar-Network/gh-actions/prepare_rust@v3-dev
-        with:
-          toolchain_components: "rustfmt,clippy"
-
-      - uses: Interstellar-Network/gh-actions/install-protoc@v3-dev
+          install_cmake_and_ninja: true
 
       ##########################################################################
 
@@ -32,11 +58,24 @@ jobs:
 
       ##########################################################################
 
-      - uses: Interstellar-Network/gh-actions/rust-build-and-test@v3-dev
+      - uses: Interstellar-Network/gh-actions/prepare_rust@v3-dev
+        with:
+          toolchain_components: "rustfmt,clippy"
 
       ##########################################################################
 
       - uses: Interstellar-Network/gh-actions/rust-lint@v3-dev
+        if: ${{ matrix.rust_args.is_lint }}
+        with:
+          clippy_args: "--features=${{ matrix.rust_args.features }} -- --D warnings"
+
+      - uses: Interstellar-Network/gh-actions/rust-build-and-test@v3-dev
+        if: ${{ !matrix.rust_args.is_lint }}
+        with:
+          test_args: "--features=${{ matrix.rust_args.features }} ${{ matrix.rust_args.test_args }}"
+          # default: 60s * 5 = 5 minutes = 300 s
+          # but these are slow so we x2 the margin
+          test_timeout_seconds: 600
 
       ##########################################################################
 
@@ -52,16 +91,31 @@ jobs:
 
   ##############################################################################
   ##############################################################################
+  # NOTE: pallet-ocw-circuits is no_std, but pallet-ocw-garble is SGX
   sgx:
     runs-on: ubuntu-latest
     steps:
       ##########################################################################
+
+      # install build dependencies
+      # cf https://github.com/Interstellar-Network/lib_circuits/blob/66d1a4ab44c2cf98030d95492f71cc845bd441b7/.github/workflows/rust.yml
+      # MUST match the same step in Dockerfile
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y libboost-filesystem-dev libpng-dev
+      - name: install "internal" dependencies
+        # TODO yosys: use proper Release build
+        run: |
+          wget https://github.com/Interstellar-Network/yosys/releases/download/yosys-0.29/yosys-0.1.29-Linux.deb -O yosys.deb
+          sudo apt-get install -y --no-install-recommends ./yosys.deb
+          wget https://github.com/Interstellar-Network/abc/releases/download/0.2.0/abc-0.1.1-Linux.deb -O abc.deb
+          sudo apt-get install -y --no-install-recommends ./abc.deb
+
       # This is pretty dumb: we MUST call action/checkout BEFORE using a local action...
       # else: Error: Can't find 'action.yml', 'action.yaml' or 'Dockerfile' under '/home/runner/work/rs-common/rs-common/.github/actions/setup'. Did you forget to run actions/checkout before running your local action?
       - uses: Interstellar-Network/gh-actions/prepare@v3-dev
         with:
           ssh_key_input: ${{ secrets.SSH_KEY_MACHINE_USER_INTERSTELLAR_CI }}
-          install_cmake_and_ninja: false
+          install_cmake_and_ninja: true
 
       ##########################################################################
 
@@ -70,8 +124,6 @@ jobs:
           use_toolchain_toml: "true"
           toolchain_toml_path: ./tests_sgx/samplecode/project_template/enclave/rust-toolchain.toml
           toolchain_components: ""
-
-      - uses: Interstellar-Network/gh-actions/install-protoc@v3-dev
 
       ##########################################################################
 
@@ -85,3 +137,4 @@ jobs:
           export CUSTOM_COMMON_PATH=$PWD/common
           (cd samplecode/project_template && make clean && make && cd bin/ && ./app)
         shell: bash
+# TODO add wasm; at least for pallet-ocw-circuits

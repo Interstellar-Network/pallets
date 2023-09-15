@@ -150,20 +150,25 @@ pub(crate) enum MockType {
 pub(crate) async fn new_test_ext(
     mock_type: MockType,
 ) -> (sp_io::TestExternalities, foreign_ipfs::ForeignNode) {
-    // MOCK "integritee-node" RPC
-    let mock_server_uri_node = MockServer::start();
-    std::env::set_var("INTERSTELLAR_URI_NODE", mock_server_uri_node.base_url());
-
     let (offchain, _state) = testing::TestOffchainExt::new();
     let mut t = sp_io::TestExternalities::default();
     t.register_extension(OffchainWorkerExt::new(offchain));
 
     // NOTE: PORT hardcoded in lib.rs so we can use a dynamic one
     let (foreign_node, ipfs_reference_client) = foreign_ipfs::run_ipfs_in_background(None);
-    std::env::set_var(
-        "IPFS_ROOT_URL",
-        format!("http://127.0.0.1:{}", foreign_node.api_port),
-    );
+
+    match mock_type {
+        MockType::IpfsDown => {
+            // "Kill the server": use a bad env var "IPFS_ROOT_URL"
+            std::env::set_var("IPFS_ROOT_URL", format!("http://127.0.0.1:{}", "4242"));
+        }
+        _ => {
+            std::env::set_var(
+                "IPFS_ROOT_URL",
+                format!("http://127.0.0.1:{}", foreign_node.api_port),
+            );
+        }
+    }
 
     match mock_type {
         MockType::RpcOcwCircuitsStorageValid
@@ -175,15 +180,16 @@ pub(crate) async fn new_test_ext(
             let cursor = match mock_type {
                 MockType::InvalidSkcd => Cursor::new(vec![42, 42]),
                 _ => {
-                    let bytes =
-                        include_bytes!("../tests/data/display_message_120x52_2digits.skcd.pb.bin")
-                            .to_vec();
+                    let bytes = include_bytes!(
+                        "../tests/data/result_display_message_120x52_2digits.postcard.bin"
+                    )
+                    .to_vec();
                     Cursor::new(bytes)
                 }
             };
             let ipfs_add_response_1 = ipfs_reference_client.add(cursor).await.unwrap();
             let cursor = Cursor::new(include_bytes!(
-                "../tests/data/display_pinpad_590x50.skcd.pb.bin"
+                "../tests/data/display_pinpad_590x50.skcd.postcard.bin"
             ));
             let ipfs_add_response_2 = ipfs_reference_client.add(cursor).await.unwrap();
 
@@ -192,7 +198,6 @@ pub(crate) async fn new_test_ext(
                     // DO NOT call set_ocw_circuits_storage_direct
                     // But simply mock the http response
                     fallback_rpc_ocw_circuits_storage_value(
-                        &mock_server_uri_node,
                         ipfs_add_response_1.hash,
                         ipfs_add_response_2.hash,
                     );
@@ -205,17 +210,10 @@ pub(crate) async fn new_test_ext(
                     );
                 }
             };
-
-            match mock_type {
-                MockType::IpfsDown => {
-                    // "Kill the server": use a bad env var "IPFS_ROOT_URL"
-                    std::env::set_var("IPFS_ROOT_URL", format!("http://127.0.0.1:{}", "4242"));
-                }
-                _ => {}
-            }
         }
         MockType::RpcOcwCircuitsStorageNoResponse => {
-            // nothing to do
+            // set any valid URL without a server running on it
+            std::env::set_var("INTERSTELLAR_URI_NODE", "http://127.0.0.1:4343");
         }
         MockType::RpcOcwCircuitsStorageInvalidHashes => {
             set_ocw_circuits_storage_direct(
@@ -242,7 +240,7 @@ fn set_ocw_circuits_storage_direct(
     t: &mut sp_io::TestExternalities,
 ) {
     t.execute_with(|| {
-        let display_skcd_package = pallet_ocw_circuits::DisplaySkcdPackage {
+        let display_skcd_package = circuits_storage_common::DisplaySkcdPackage {
             message_skcd_cid: TryInto::<BoundedVec<u8, ConstU32<64>>>::try_into(
                 message_skcd_cid.as_bytes().to_vec(),
             )
@@ -274,11 +272,11 @@ fn set_ocw_circuits_storage_direct(
 /// cf "fn get_ocw_circuits_storage_value"
 ///
 /// based on https://github.com/paritytech/substrate/blob/e9b0facf70eeb08032cc7e83548c62f0b4a24bb1/frame/examples/offchain-worker/src/tests.rs#L385
-fn fallback_rpc_ocw_circuits_storage_value(
-    server: &MockServer,
-    message_skcd_cid: String,
-    pinpad_skcd_cid: String,
-) {
+fn fallback_rpc_ocw_circuits_storage_value(message_skcd_cid: String, pinpad_skcd_cid: String) {
+    // MOCK "integritee-node" RPC
+    let mock_server_uri_node = MockServer::start();
+    std::env::set_var("INTERSTELLAR_URI_NODE", mock_server_uri_node.base_url());
+
     let body_json = json!({
         "jsonrpc": "2.0",
         "id": "1",
@@ -287,7 +285,7 @@ fn fallback_rpc_ocw_circuits_storage_value(
     });
     let body = serde_json::to_string(&body_json).unwrap();
 
-    let display_skcd_package = pallet_ocw_circuits::DisplaySkcdPackage {
+    let display_skcd_package = circuits_storage_common::DisplaySkcdPackage {
         message_skcd_cid: TryInto::<BoundedVec<u8, ConstU32<64>>>::try_into(
             message_skcd_cid.as_bytes().to_vec(),
         )
@@ -310,7 +308,7 @@ fn fallback_rpc_ocw_circuits_storage_value(
     });
     let response_body = serde_json::to_vec(&response_body_json).unwrap();
 
-    server.mock(|when, then| {
+    mock_server_uri_node.mock(|when, then| {
         when.method(POST)
             .path("/")
             .header("Content-Type", "application/json;charset=utf-8")
@@ -321,6 +319,42 @@ fn fallback_rpc_ocw_circuits_storage_value(
             // MUST match the param passed to "mock_ipfs_cat_response"
             .body(response_body);
     });
+
+    // TODO? when using feature "with_sp_offchain"
+    // make sure it's sent correctly
+    // state.fulfill_pending_request(
+    //     0,
+    //     testing::PendingRequest {
+    //         method: "POST".into(),
+    //         uri: MOCK_INTERSTELLAR_URI_NODE.to_string(),
+    //         headers: vec![(
+    //             "Content-Type".into(),
+    //             "application/json;charset=utf-8".into(),
+    //         )],
+    //         sent: true,
+    //         ..Default::default()
+    //     },
+    //     response_body,
+    //     vec![(
+    //         "content-type".into(),
+    //         "application/json; charset=utf-8".into(),
+    //     )],
+    // );
+    // state.expect_request(testing::PendingRequest {
+    //     method: "POST".into(),
+    //     uri: MOCK_INTERSTELLAR_URI_NODE.to_string(),
+    //     headers: vec![(
+    //         "Content-Type".into(),
+    //         "application/json;charset=utf-8".into(),
+    //     )],
+    //     body: body,
+    //     response: Some(response_body),
+    //     response_headers: vec![(
+    //         "content-type".into(),
+    //         "application/json; charset=utf-8".into(),
+    //     )],
+    //     ..Default::default()
+    // });
 }
 
 #[cfg(test)]

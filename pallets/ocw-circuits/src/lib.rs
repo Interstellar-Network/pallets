@@ -1,48 +1,62 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-// https://github.com/neoeinstein/protoc-gen-prost/issues/26
-#[allow(clippy::derive_partial_eq_without_eq)]
-mod interstellarpbapicircuits {
-    // include_bytes!(concat!(env!("OUT_DIR")), "/interstellarpbapicircuits.rs");
-    // include_bytes!(concat!(env!("OUT_DIR"), "/interstellarpbapicircuits.rs"));
-    //
-    // prost-build FAIL in enclave/SGX
-    // include!(concat!(env!("OUT_DIR"), "/interstellarpbapicircuits.rs"));
-    include!("../deps/protos/generated/rust/interstellarpbapicircuits.rs");
-}
-
 #[cfg(test)]
 mod mock;
 
 #[cfg(test)]
 mod tests;
 
-use codec::{Decode, Encode};
-use frame_system::ensure_signed;
+extern crate alloc;
+
 use frame_system::offchain::AppCrypto;
 use frame_system::offchain::CreateSignedTransaction;
-use frame_system::offchain::SendSignedTransaction;
-use frame_system::offchain::Signer;
 use scale_info::prelude::*;
-use serde::Deserialize;
 use sp_core::crypto::KeyTypeId;
-use sp_core::offchain::Duration;
-use sp_runtime::offchain::storage::StorageValueRef;
-use sp_runtime::offchain::storage_lock::BlockAndTime;
-use sp_runtime::offchain::storage_lock::StorageLock;
 use sp_runtime::traits::BlockNumberProvider;
 use sp_runtime::transaction_validity::InvalidTransaction;
-use sp_runtime::RuntimeDebug;
-use sp_std::borrow::ToOwned;
 use sp_std::prelude::*;
 use sp_std::str;
 use sp_std::vec::Vec;
 
+// NOTE: "cf MUST NOT try to compile "lib_circuits" for WASM" in Cargo.toml
+#[cfg(all(feature = "circuit-gen-rs", not(target_family = "wasm")))]
+use alloc::string::String;
+#[cfg(all(feature = "circuit-gen-rs", not(target_family = "wasm")))]
+use alloc::string::ToString;
+#[cfg(all(feature = "circuit-gen-rs", not(target_family = "wasm")))]
+use frame_system::ensure_signed;
+#[cfg(all(feature = "circuit-gen-rs", not(target_family = "wasm")))]
+use frame_system::offchain::{SendSignedTransaction, Signer};
+#[cfg(all(feature = "circuit-gen-rs", not(target_family = "wasm")))]
+use interstellar_ipfs_client::IpfsClient;
+#[cfg(all(feature = "circuit-gen-rs", not(target_family = "wasm")))]
+use sp_runtime::offchain::{
+    storage::StorageValueRef,
+    storage_lock::{BlockAndTime, StorageLock},
+    Duration,
+};
+#[cfg(all(feature = "circuit-gen-rs", not(target_family = "wasm")))]
+use sp_std::borrow::ToOwned;
+
 pub use pallet::*;
+
+/// TEST ONLY "hook"
+/// Because the tests need the full body bytes to mock correctly...
+/// It is used to overwrite the result of `lib_circuits_rs::serialize`
+///
+/// cf https://github.com/paritytech/substrate/pull/12307/files
+///
+#[cfg(test)]
+pub trait MyTestCallback {
+    fn my_test_hook(input: Vec<u8>) -> Vec<u8> {
+        input
+    }
+}
 
 #[frame_support::pallet]
 pub mod pallet {
     use super::*;
+    use circuits_storage_common::DisplaySkcdPackage;
     use frame_support::pallet_prelude::*;
     use frame_system::pallet_prelude::*;
 
@@ -55,20 +69,25 @@ pub mod pallet {
     /// The keys can be inserted manually via RPC (see `author_insertKey`).
     pub const KEY_TYPE: KeyTypeId = KeyTypeId(*b"circ");
 
+    #[cfg(all(feature = "circuit-gen-rs", not(target_family = "wasm")))]
     const LOCK_TIMEOUT_EXPIRATION: u64 = 10000; // in milli-seconds
+    #[cfg(all(feature = "circuit-gen-rs", not(target_family = "wasm")))]
     const LOCK_BLOCK_EXPIRATION: u32 = 3; // in block number
 
     const ONCHAIN_TX_KEY: &[u8] = b"ocw-circuits::storage::tx";
+    #[cfg(all(feature = "circuit-gen-rs", not(target_family = "wasm")))]
     const LOCK_KEY: &[u8] = b"ocw-circuits::lock";
-    const API_ENDPOINT_GENERIC_URL: &str =
-        "/interstellarpbapicircuits.SkcdApi/GenerateSkcdGenericFromIPFS";
-    const API_ENDPOINT_DISPLAY_URL: &str = "/interstellarpbapicircuits.SkcdApi/GenerateSkcdDisplay";
+
     // Resolutions for the "message" mode and the "pinpad" mode
     // There are no good/bad ones, it is only trial and error.
     // You SHOULD use lib_circuits's cli_display_skcd to try and find good ones.
+    #[cfg(all(feature = "circuit-gen-rs", not(target_family = "wasm")))]
     const DEFAULT_MESSAGE_WIDTH: u32 = 1280 / 2;
+    #[cfg(all(feature = "circuit-gen-rs", not(target_family = "wasm")))]
     const DEFAULT_MESSAGE_HEIGHT: u32 = 720 / 2;
+    #[cfg(all(feature = "circuit-gen-rs", not(target_family = "wasm")))]
     const DEFAULT_PINPAD_WIDTH: u32 = 590;
+    #[cfg(all(feature = "circuit-gen-rs", not(target_family = "wasm")))]
     const DEFAULT_PINPAD_HEIGHT: u32 = 50;
 
     /// Based on the above `KeyTypeId` we need to generate a pallet-specific crypto type wrapper.
@@ -76,6 +95,8 @@ pub mod pallet {
     /// them with the pallet-specific identifier.
     pub mod crypto {
         use crate::KEY_TYPE;
+        use alloc::format;
+        use alloc::string::String;
         use sp_core::sr25519::Signature as Sr25519Signature;
         use sp_runtime::{
             app_crypto::{app_crypto, sr25519},
@@ -120,28 +141,8 @@ pub mod pallet {
         //     + From<frame_system::Call<Self>>;
         /// The identifier type for an offchain worker.
         type AuthorityId: AppCrypto<Self::Public, Self::Signature>;
-    }
-
-    /// Easy way to make a link b/w a "message" and "pinpad" circuits
-    /// that way we can have ONE extrinsic that generates both in one call
-    #[derive(
-        Clone,
-        Encode,
-        Decode,
-        Eq,
-        PartialEq,
-        RuntimeDebug,
-        Default,
-        scale_info::TypeInfo,
-        MaxEncodedLen,
-    )]
-    pub struct DisplaySkcdPackage {
-        // 32 b/c IPFS hash is 256 bits = 32 bytes
-        // But due to encoding(??) in practice it is 46 bytes(checked with debugger), and we take some margin
-        pub message_skcd_cid: BoundedVec<u8, ConstU32<64>>,
-        pub message_skcd_server_metadata_nb_digits: u32,
-        pub pinpad_skcd_cid: BoundedVec<u8, ConstU32<64>>,
-        pub pinpad_skcd_server_metadata_nb_digits: u32,
+        #[cfg(test)]
+        type HookCallPostSerializedPackage: MyTestCallback;
     }
 
     /// For now it will be stored as a StorageValue but later we could use
@@ -171,28 +172,19 @@ pub mod pallet {
     // Errors inform users that something went wrong.
     #[pallet::error]
     pub enum Error<T> {
-        // Error returned when not sure which ocw function to executed
-        UnknownOffchainMux,
-
-        // Error returned when making signed transactions in off-chain worker
-        NoLocalAcctForSigning,
-        OffchainSignedTxError,
-
-        // Error returned when making unsigned transactions in off-chain worker
-        OffchainUnsignedTxError,
-
-        // Error returned when making unsigned transactions with signed payloads in off-chain worker
-        OffchainUnsignedTxSignedPayloadError,
-
-        // Error returned when fetching github info
-        HttpFetchingError,
-        DeserializeToObjError,
-        DeserializeToStrError,
-        EncodeError,
-
         // get_display_circuits_package(ie pallet_ocw_garble) was called
         // but "DisplaySkcdPackageValue" is not completely set
         DisplaySkcdPackageValueError,
+        IpfsClientCreationError,
+        IpfsCallError,
+
+        CircuitDisplayGenerateError,
+        CircuitSerializeError,
+        CircuitGenericGenerateError,
+
+        StorageGetError,
+        /// Special case: not really an error
+        OffchainNothingToDoWarning,
     }
 
     #[pallet::hooks]
@@ -210,14 +202,26 @@ pub mod pallet {
             log::info!("[ocw-circuits] Hello from pallet-ocw-circuits.");
 
             // TODO proper job queue; eg use last_run_block_number and process all the needed ones
+            #[cfg(all(feature = "circuit-gen-rs", not(target_family = "wasm")))]
             let result = Self::process_if_needed(block_number);
 
+            #[cfg(all(feature = "circuit-gen-rs", not(target_family = "wasm")))]
             if let Err(e) = result {
                 log::error!("[ocw-circuits] offchain_worker error: {:?}", e);
             }
+
+            #[cfg(not(all(feature = "circuit-gen-rs", not(target_family = "wasm"))))]
+            log::info!(
+                "[ocw-circuits] Running without feature `circuit-gen-rs; no-op! {:?}`",
+                block_number
+            );
         }
     }
 
+    /// Return the stored `DisplaySkcdPackageValue` if it exists, else Error!
+    ///
+    /// This is called by `pallet-ocw-garble`!
+    ///
     pub fn get_display_circuits_package<T: Config>() -> Result<DisplaySkcdPackage, Error<T>> {
         let display_circuit_package = <DisplaySkcdPackageValue<T>>::get();
 
@@ -249,6 +253,8 @@ pub mod pallet {
         }
     }
 
+    // cf https://substrate.stackexchange.com/questions/7804/how-to-conditionally-compile-functions-in-palletcall
+    // for why we need an indirection...
     #[pallet::call]
     impl<T: Config> Pallet<T> {
         #[pallet::call_index(0)]
@@ -257,16 +263,7 @@ pub mod pallet {
             origin: OriginFor<T>,
             verilog_cid: Vec<u8>,
         ) -> DispatchResult {
-            let who = ensure_signed(origin)?;
-            log::info!(
-                "[ocw-circuits] submit_config_generic_signed: ({:?}, {:?})",
-                sp_std::str::from_utf8(&verilog_cid).expect("verilog_cid utf8"),
-                who
-            );
-
-            Self::append_or_replace_verilog_hash(Some(verilog_cid), GrpcCallKind::Generic);
-
-            Ok(())
+            Self::submit_config_generic_signed_impl(origin, verilog_cid)
         }
 
         #[pallet::call_index(1)]
@@ -274,15 +271,7 @@ pub mod pallet {
         pub fn submit_config_display_circuits_package_signed(
             origin: OriginFor<T>,
         ) -> DispatchResult {
-            let who = ensure_signed(origin)?;
-            log::info!(
-                "[ocw-circuits] submit_config_display_circuits_package_signed: ({:?})",
-                who
-            );
-
-            Self::append_or_replace_verilog_hash(None, GrpcCallKind::Display);
-
-            Ok(())
+            Self::submit_config_display_circuits_package_signed_impl(origin)
         }
 
         /// Called at the end of offchain_worker to publish the result
@@ -292,8 +281,9 @@ pub mod pallet {
         #[pallet::weight(10000)]
         pub fn callback_new_skcd_signed(origin: OriginFor<T>, skcd_cid: Vec<u8>) -> DispatchResult {
             let who = ensure_signed(origin)?;
+
             log::info!(
-                "[ocw-circuits] callback_new_skcd_signed: ({:?},{:?})",
+                "[ocw-circuits] callback_new_skcd_signed: {:?} for {:?})",
                 sp_std::str::from_utf8(&skcd_cid).expect("skcd_cid utf8"),
                 who
             );
@@ -312,6 +302,7 @@ pub mod pallet {
             pinpad_nb_digits: u32,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
+
             log::info!(
                 "[ocw-circuits] callback_new_display_circuits_package_signed: ({:?},{:?}),({:?},{:?}) for {:?}",
                 sp_std::str::from_utf8(&message_skcd_cid).expect("message_skcd_cid utf8"),
@@ -342,8 +333,41 @@ pub mod pallet {
         }
     }
 
+    #[derive(Debug, Encode, Decode, Default)]
+    pub(crate) enum GrpcCallKind {
+        Generic {
+            verilog_cid: Vec<u8>,
+        },
+        #[default]
+        Display,
+    }
+
+    /// Results wrappers for the calls to "lib_circuits_rs::"
+    #[cfg(all(feature = "circuit-gen-rs", not(target_family = "wasm")))]
+    enum LibCircuitsRsResultKind {
+        Generic {
+            ipfs_hash: String,
+        },
+        // one reply for message, one for pinpad
+        Display {
+            message_ipfs_hash: String,
+            message_nb_digits: u32,
+            pinpad_ipfs_hash: String,
+            pinpad_nb_digits: u32,
+        },
+    }
+
+    #[derive(Debug, Encode, Decode, Default)]
+    pub(crate) struct IndexingData {
+        // // verilog_ipfs_hash only if GrpcCallKind::Generic
+        // // (For now) when it is GrpcCallKind::Display the corresponding Verilog are packaged in the repo api_circuits
+        // // = in "display mode" the Verilog are hardcoded, NOT passed dynamically via IPFS; contrary to "generic mode"
+        // verilog_ipfs_hash: Option<Vec<u8>>,
+        pub(crate) grpc_kind: GrpcCallKind,
+    }
+
     impl<T: Config> Pallet<T> {
-        fn derived_key() -> Vec<u8> {
+        pub fn derived_key() -> Vec<u8> {
             // TODO re-add block_number?
             let block_number = T::BlockNumber::default();
             block_number.using_encoded(|encoded_bn| {
@@ -355,49 +379,13 @@ pub mod pallet {
                     .collect::<Vec<u8>>()
             })
         }
-    }
 
-    #[derive(Debug, Deserialize, Encode, Decode, Default)]
-    enum GrpcCallKind {
-        #[default]
-        Generic,
-        Display,
-    }
-
-    // reply type for each GrpcCallKind
-    enum GrpcCallReplyKind {
-        Generic {
-            reply: crate::interstellarpbapicircuits::SkcdGenericFromIpfsReply,
-        },
-        // one reply for message, one for pinpad
-        Display {
-            message_reply: crate::interstellarpbapicircuits::SkcdDisplayReply,
-            message_nb_digits: u32,
-            pinpad_reply: crate::interstellarpbapicircuits::SkcdDisplayReply,
-            pinpad_nb_digits: u32,
-        },
-    }
-
-    #[derive(Debug, Deserialize, Encode, Decode, Default)]
-    struct IndexingData {
-        // verilog_ipfs_hash only if GrpcCallKind::Generic
-        // (For now) when it is GrpcCallKind::Display the corresponding Verilog are packaged in the repo api_circuits
-        // = in "display mode" the Verilog are hardcoded, NOT passed dynamically via IPFS; contrary to "generic mode"
-        verilog_ipfs_hash: Option<Vec<u8>>,
-        block_number: u32,
-        grpc_kind: GrpcCallKind,
-    }
-
-    impl<T: Config> Pallet<T> {
         /// Append a new number to the tail of the list, removing an element from the head if reaching
         ///   the bounded length.
-        fn append_or_replace_verilog_hash(verilog_cid: Option<Vec<u8>>, grpc_kind: GrpcCallKind) {
+        #[cfg(all(feature = "circuit-gen-rs", not(target_family = "wasm")))]
+        fn add_job_to_queue(grpc_kind: GrpcCallKind) {
             let key = Self::derived_key();
-            let data = IndexingData {
-                verilog_ipfs_hash: verilog_cid,
-                block_number: 1,
-                grpc_kind,
-            };
+            let data = IndexingData { grpc_kind };
             sp_io::offchain_index::set(&key, &data.encode());
         }
 
@@ -407,6 +395,7 @@ pub mod pallet {
         ///
         /// https://github.com/JoshOrndorff/recipes/blob/master/text/off-chain-workers/storage.md
         /// https://gist.github.com/spencerbh/1a150e076f4cef0ff4558642c4837050
+        #[cfg(all(feature = "circuit-gen-rs", not(target_family = "wasm")))]
         fn process_if_needed(_block_number: T::BlockNumber) -> Result<(), Error<T>> {
             // Reading back the off-chain indexing value. It is exactly the same as reading from
             // ocw local storage.
@@ -415,21 +404,18 @@ pub mod pallet {
             // During the next call, the old value is there!
             // So we MUST use StorageValueRef/LocalStorage to write.
             let key = Self::derived_key();
-            let oci_mem = StorageValueRef::persistent(&key);
+            let mut oci_mem = StorageValueRef::persistent(&key);
 
             let indexing_data = oci_mem
                 .get::<IndexingData>()
-                .unwrap_or_else(|_| Some(IndexingData::default()))
-                .unwrap_or_default();
-
-            let to_process_verilog_cid = indexing_data.verilog_ipfs_hash;
-            let to_process_block_number = indexing_data.block_number;
-
-            // TODO proper job queue; or at least proper CHECK
-            if to_process_block_number == 0 {
-                log::info!("[ocw-circuits] nothing to do, returning...");
-                return Ok(());
-            }
+                .map_err(|err| {
+                    log::warn!("[ocw-circuits] StorageRetrievalError... : {err:?}");
+                    <Error<T>>::StorageGetError
+                })?
+                .ok_or_else(|| {
+                    log::info!("[ocw-circuits] nothing to do, returning...");
+                    <Error<T>>::OffchainNothingToDoWarning
+                })?;
 
             // Since off-chain storage can be accessed by off-chain workers from multiple runs, it is important to lock
             //   it before doing heavy computations or write operations.
@@ -455,65 +441,119 @@ pub mod pallet {
                 //
                 // DO NOT use "sp_io::offchain_index::set"!
                 // We MUST use "StorageValueRef::persistent" else the value is not updated??
-                oci_mem.set(&IndexingData::default());
+                oci_mem.clear();
 
                 let result_grpc_call = match indexing_data.grpc_kind {
-                    GrpcCallKind::Generic => Self::call_grpc_generic(
-                        &to_process_verilog_cid.expect("missing verilog_cid"),
-                    ),
-                    GrpcCallKind::Display => Self::call_grpc_display(),
+                    GrpcCallKind::Generic { verilog_cid } => Self::call_grpc_generic(&verilog_cid)?,
+                    GrpcCallKind::Display => Self::call_grpc_display()?,
                 };
 
-                Self::finalize_grpc_call(result_grpc_call)
+                Self::finalize_grpc_call(result_grpc_call);
             }
+
+            Ok(())
+        }
+
+        #[cfg(not(all(feature = "circuit-gen-rs", not(target_family = "wasm"))))]
+        fn submit_config_generic_signed_impl(
+            _origin: OriginFor<T>,
+            _verilog_cid: Vec<u8>,
+        ) -> DispatchResult {
+            unimplemented!("submit_config_generic_signed_impl: require feature circuit-gen-rs")
+        }
+
+        #[cfg(all(feature = "circuit-gen-rs", not(target_family = "wasm")))]
+        fn submit_config_generic_signed_impl(
+            origin: OriginFor<T>,
+            verilog_cid: Vec<u8>,
+        ) -> DispatchResult {
+            let who = ensure_signed(origin)?;
+            log::info!(
+                "[ocw-circuits] submit_config_generic_signed: ({:?}, {:?})",
+                sp_std::str::from_utf8(&verilog_cid).expect("verilog_cid utf8"),
+                who
+            );
+
+            Self::add_job_to_queue(GrpcCallKind::Generic { verilog_cid });
+
+            Ok(())
+        }
+
+        #[cfg(not(all(feature = "circuit-gen-rs", not(target_family = "wasm"))))]
+        fn submit_config_display_circuits_package_signed_impl(
+            _origin: OriginFor<T>,
+        ) -> DispatchResult {
+            unimplemented!("submit_config_display_circuits_package_signed_impl: require feature circuit-gen-rs")
+        }
+
+        #[cfg(all(feature = "circuit-gen-rs", not(target_family = "wasm")))]
+        fn submit_config_display_circuits_package_signed_impl(
+            origin: OriginFor<T>,
+        ) -> DispatchResult {
+            let who = ensure_signed(origin)?;
+            log::info!(
+                "[ocw-circuits] submit_config_display_circuits_package_signed: ({:?})",
+                who
+            );
+
+            Self::add_job_to_queue(GrpcCallKind::Display);
+
             Ok(())
         }
 
         /// Call the GRPC endpoint API_ENDPOINT_GENERIC_URL, encoding the request as grpc-web, and decoding the response
         ///
         /// return: a IPFS hash
-        fn call_grpc_generic(verilog_cid: &[u8]) -> Result<GrpcCallReplyKind, Error<T>> {
+        #[cfg(all(feature = "circuit-gen-rs", not(target_family = "wasm")))]
+        fn call_grpc_generic(verilog_cid: &[u8]) -> Result<LibCircuitsRsResultKind, Error<T>> {
+            let ipfs_client = interstellar_ipfs_client::IpfsClientSpOffchain::new(&get_ipfs_uri())
+                .map_err(|err| {
+                    log::error!("[ocw-circuits] ipfs client new error: {:?}", err);
+                    <Error<T>>::IpfsClientCreationError
+                })?;
+
             let verilog_cid_str = sp_std::str::from_utf8(verilog_cid)
                 .expect("call_grpc_generic from_utf8")
                 .to_owned();
-            let input = crate::interstellarpbapicircuits::SkcdGenericFromIpfsRequest {
-                verilog_cid: verilog_cid_str,
-            };
-            let body_bytes = http_grpc_client::encode_body_grpc_web(&input)
-                .map_err(|_| <Error<T>>::EncodeError)?;
 
-            // construct the full endpoint URI using:
-            // - dynamic "URI root" from env
-            // - hardcoded API_ENDPOINT_GENERIC_URL from "const" in this file
-            #[cfg(feature = "std")]
-            let uri_root = std::env::var("aaa").unwrap();
-            #[cfg(not(feature = "std"))]
-            let uri_root = "PLACEHOLDER_no_std";
-            let endpoint = format!("{uri_root}{API_ENDPOINT_GENERIC_URL}");
+            // TODO(lib_circuits) get .v from IPFS (eg use ipfs_cat), and use new eg `lib_circuits_rs::new_from_verilog`
+            let verilog_buf = ipfs_client.ipfs_cat(&verilog_cid_str).map_err(|err| {
+                log::error!("[ocw-circuits] ipfs call ipfs_add error: {:?}", err);
+                <Error<T>>::IpfsCallError
+            })?;
 
-            let (resp_bytes, resp_content_type) =
-                http_grpc_client::sp_offchain_fetch_from_remote_grpc_web(
-                    Some(body_bytes),
-                    &endpoint,
-                    &http_grpc_client::RequestMethod::Post,
-                    Some(&http_grpc_client::ContentType::GrpcWeb),
-                    // Since the "Swanky refactor" this is quite slow; around 45-50s locally
-                    // But add some margin for CI and demos
-                    core::time::Duration::from_millis(120_000),
-                )
-                .map_err(|e| {
-                    log::error!("[ocw-circuits] call_grpc_generic error: {:?}", e);
-                    <Error<T>>::HttpFetchingError
-                })?;
+            let circuit = lib_circuits_rs::new_from_verilog(&verilog_buf).map_err(|err| {
+                log::error!(
+                    "[ocw-circuits] lib_circuits_rs::new_from_verilog error: {:?} {:?}",
+                    err.to_string(),
+                    err
+                );
+                <Error<T>>::CircuitGenericGenerateError
+            })?;
 
-            let resp: crate::interstellarpbapicircuits::SkcdGenericFromIpfsReply =
-                http_grpc_client::decode_body_grpc_web(resp_bytes, &resp_content_type).map_err(
-                    |e| {
-                        log::error!("[ocw-circuits] call_grpc_generic error: {:?}", e);
-                        <Error<T>>::DeserializeToObjError
-                    },
-                )?;
-            Ok(GrpcCallReplyKind::Generic { reply: resp })
+            // then serialize "garb" and "packmsg"
+            let serialized_circuit = lib_circuits_rs::serialize(&circuit).map_err(|err| {
+                log::error!(
+                    "[ocw-circuits] lib_circuits_rs::serialize error: {:?} {:?}",
+                    err.to_string(),
+                    err
+                );
+                <Error<T>>::CircuitSerializeError
+            })?;
+
+            // the tests need the full body bytes to mock correctly...
+            #[cfg(test)]
+            let serialized_circuit =
+                T::HookCallPostSerializedPackage::my_test_hook(serialized_circuit);
+
+            let ipfs_add_response = ipfs_client.ipfs_add(&serialized_circuit).map_err(|err| {
+                log::error!("[ocw-circuits] ipfs call ipfs_add error: {:?}", err);
+                <Error<T>>::IpfsCallError
+            })?;
+
+            Ok(LibCircuitsRsResultKind::Generic {
+                ipfs_hash: ipfs_add_response.hash,
+            })
         }
 
         /// Call the GRPC endpoint API_ENDPOINT_GENERIC_URL, encoding the request as grpc-web, and decoding the response
@@ -523,105 +563,16 @@ pub mod pallet {
         /// - the number of digits(that was sent to `api_circuits` in the Request, and SHOULD be "burned in" the Garbled Circuit)
         ///   NOTE: it is CRITICAL to expose this number of digits(eg via the Storage, or RPC) b/c `pallet-ocw-garble`
         ///         MUST know it when attempting to garble the circuit to generate the correct number of random digits.
-        fn call_grpc_display() -> Result<GrpcCallReplyKind, Error<T>> {
-            /// aux function: call API_ENDPOINT_DISPLAY_URL for either is_message or not
-            fn call_grpc_display_one<T>(
-                is_message: bool,
-            ) -> Result<(crate::interstellarpbapicircuits::SkcdDisplayReply, u32), Error<T>>
-            {
-                let input = if is_message {
-                    crate::interstellarpbapicircuits::SkcdDisplayRequest {
-                        width: DEFAULT_MESSAGE_WIDTH,
-                        height: DEFAULT_MESSAGE_HEIGHT,
-                        digits_bboxes: vec![
-                            // first digit bbox --------------------------------------------
-                            0.25_f32, 0.1_f32, 0.45_f32, 0.9_f32,
-                            // second digit bbox -------------------------------------------
-                            0.55_f32, 0.1_f32, 0.75_f32, 0.9_f32,
-                        ],
-                    }
-                } else {
-                    // IMPORTANT: by convention the "pinpad" is 10 digits, placed horizontally(side by side)
-                    // DO NOT change the layout, else wallet-app will NOT display the pinpad correctly!
-                    // That is b/c this layout in treated as a "texture atlas" so the positions MUST be known.
-                    // Ideally the positions SHOULD be passed from here all the way into the serialized .pgarbled/.packmsg
-                    // but this NOT YET the case.
-
-                    // 10 digits, 4 corners(vertices) per digit
-                    let mut digits_bboxes: Vec<f32> = Vec::with_capacity(10 * 4);
-                    /*
-                    for (int i = 0; i < 10; i++) {
-                        digits_bboxes.emplace_back(0.1f * i, 0.0f, 0.1f * (i + 1), 1.0f);
-                    }
-                    */
-                    for i in 0..10 {
-                        digits_bboxes.append(
-                            vec![
-                                0.1_f32 * i as f32,
-                                0.0_f32,
-                                0.1_f32 * (i + 1) as f32,
-                                1.0_f32,
-                            ]
-                            .as_mut(),
-                        );
-                    }
-
-                    crate::interstellarpbapicircuits::SkcdDisplayRequest {
-                        width: DEFAULT_PINPAD_WIDTH,
-                        height: DEFAULT_PINPAD_HEIGHT,
-                        digits_bboxes,
-                    }
-                };
-
-                let body_bytes = http_grpc_client::encode_body_grpc_web(&input)
-                    .map_err(|_| <Error<T>>::EncodeError)?;
-
-                // construct the full endpoint URI using:
-                // - dynamic "URI root" from env
-                // - hardcoded API_ENDPOINT_DISPLAY_URL from "const" in this file
-                #[cfg(feature = "std")]
-                let uri_root = std::env::var("INTERSTELLAR_URI_ROOT_API_CIRCUITS").unwrap();
-                #[cfg(not(feature = "std"))]
-                let uri_root = "PLACEHOLDER_no_std";
-                let endpoint = format!("{uri_root}{API_ENDPOINT_DISPLAY_URL}");
-
-                let (resp_bytes, resp_content_type) =
-                    http_grpc_client::sp_offchain_fetch_from_remote_grpc_web(
-                        Some(body_bytes),
-                        &endpoint,
-                        &http_grpc_client::RequestMethod::Post,
-                        Some(&http_grpc_client::ContentType::GrpcWeb),
-                        // Since the "Swanky refactor" this is quite slow; around 45-50s locally
-                        // But add some margin for CI and demos
-                        core::time::Duration::from_millis(120_000),
-                    )
-                    .map_err(|e| {
-                        log::error!("[ocw-circuits] call_grpc_display error: {:?}", e);
-                        <Error<T>>::HttpFetchingError
-                    })?;
-
-                let resp: crate::interstellarpbapicircuits::SkcdDisplayReply =
-                    http_grpc_client::decode_body_grpc_web(resp_bytes, &resp_content_type)
-                        .map_err(|e| {
-                            log::error!("[ocw-circuits] call_grpc_generic error: {:?}", e);
-                            <Error<T>>::DeserializeToObjError
-                        })?;
-
-                // nb_digits: we send in the Request one "BBox" per digit(ie 4 floats)
-                // NOTE: if we are here we can guarantee the C++ has checked it was indeed valid BBox so we can / 4 and this is it
-                Ok((resp, (input.digits_bboxes.len() / 4).try_into().unwrap()))
-            }
-
-            let (message_reply, message_nb_digits) =
-                call_grpc_display_one::<T>(true).expect("message_reply failed!");
-            let (pinpad_reply, pinpad_nb_digits) =
-                call_grpc_display_one::<T>(false).expect("pinpad_reply failed!");
+        #[cfg(all(feature = "circuit-gen-rs", not(target_family = "wasm")))]
+        fn call_grpc_display() -> Result<LibCircuitsRsResultKind, Error<T>> {
+            let (message_ipfs_hash, message_nb_digits) = call_grpc_display_one::<T>(true)?;
+            let (pinpad_ipfs_hash, pinpad_nb_digits) = call_grpc_display_one::<T>(false)?;
 
             // TODO pass correct params for pinpad and message
-            Ok(GrpcCallReplyKind::Display {
-                message_reply,
+            Ok(LibCircuitsRsResultKind::Display {
+                message_ipfs_hash,
                 message_nb_digits,
-                pinpad_reply,
+                pinpad_ipfs_hash,
                 pinpad_nb_digits,
             })
         }
@@ -630,48 +581,45 @@ pub mod pallet {
         /// Publish the result back via send_signed_transaction(and Event)
         ///
         /// param: result_grpc_call: returned by call_grpc_display/call_grpc_generic
-        fn finalize_grpc_call(result_grpc_call: Result<GrpcCallReplyKind, Error<T>>) {
-            match result_grpc_call {
-                Ok(result_reply) => {
-                    // Using `send_signed_transaction` associated type we create and submit a transaction
-                    // representing the call we've just created.
-                    // `send_signed_transaction()` return type is `Option<(Account<T>, Result<(), ()>)>`. It is:
-                    //   - `None`: no account is available for sending transaction
-                    //   - `Some((account, Ok(())))`: transaction is successfully sent
-                    //   - `Some((account, Err(())))`: error occurred when sending the transaction
-                    let signer = Signer::<T, T::AuthorityId>::all_accounts();
-                    if !signer.can_sign() {
-                        log::error!(
-                            "[ocw-circuits] No local accounts available. Consider adding one via `author_insertKey` RPC[ALTERNATIVE DEV ONLY check 'if config.offchain_worker.enabled' in service.rs]"
-                        );
-                    }
-
-                    let results = signer.send_signed_transaction(|_account| match &result_reply {
-                        GrpcCallReplyKind::Generic { reply } => Call::callback_new_skcd_signed {
-                            skcd_cid: reply.skcd_cid.bytes().collect(),
-                        },
-                        GrpcCallReplyKind::Display {
-                            message_reply,
-                            message_nb_digits,
-                            pinpad_reply,
-                            pinpad_nb_digits,
-                        } => Call::callback_new_display_circuits_package_signed {
-                            message_skcd_cid: message_reply.skcd_cid.bytes().collect(),
-                            message_nb_digits: *message_nb_digits,
-                            pinpad_skcd_cid: pinpad_reply.skcd_cid.bytes().collect(),
-                            pinpad_nb_digits: *pinpad_nb_digits,
-                        },
-                    });
-
-                    log::info!(
-                        "[ocw-circuits] callback_new_skcd_signed sent number : {:#?}",
-                        results.len()
-                    );
-                }
-                Err(err) => {
-                    log::error!("[ocw-circuits] finalize_grpc_call: error: {:?}", err);
-                }
+        #[cfg(all(feature = "circuit-gen-rs", not(target_family = "wasm")))]
+        fn finalize_grpc_call(lib_circuits_rs_result: LibCircuitsRsResultKind) {
+            // Using `send_signed_transaction` associated type we create and submit a transaction
+            // representing the call we've just created.
+            // `send_signed_transaction()` return type is `Option<(Account<T>, Result<(), ()>)>`. It is:
+            //   - `None`: no account is available for sending transaction
+            //   - `Some((account, Ok(())))`: transaction is successfully sent
+            //   - `Some((account, Err(())))`: error occurred when sending the transaction
+            let signer = Signer::<T, T::AuthorityId>::all_accounts();
+            if !signer.can_sign() {
+                log::error!(
+                    "[ocw-circuits] No local accounts available. Consider adding one via `author_insertKey` RPC[ALTERNATIVE DEV ONLY check 'if config.offchain_worker.enabled' in service.rs]"
+                );
             }
+
+            let tx_results =
+                signer.send_signed_transaction(|_account| match &lib_circuits_rs_result {
+                    LibCircuitsRsResultKind::Generic { ipfs_hash } => {
+                        Call::callback_new_skcd_signed {
+                            skcd_cid: ipfs_hash.bytes().collect(),
+                        }
+                    }
+                    LibCircuitsRsResultKind::Display {
+                        message_ipfs_hash,
+                        message_nb_digits,
+                        pinpad_ipfs_hash,
+                        pinpad_nb_digits,
+                    } => Call::callback_new_display_circuits_package_signed {
+                        message_skcd_cid: message_ipfs_hash.bytes().collect(),
+                        message_nb_digits: *message_nb_digits,
+                        pinpad_skcd_cid: pinpad_ipfs_hash.bytes().collect(),
+                        pinpad_nb_digits: *pinpad_nb_digits,
+                    },
+                });
+
+            log::info!(
+                "[ocw-circuits] callback_new_skcd_signed sent number : {:#?}",
+                tx_results.len()
+            );
         }
     }
 
@@ -682,5 +630,104 @@ pub mod pallet {
         fn current_block_number() -> Self::BlockNumber {
             <frame_system::Pallet<T>>::block_number()
         }
+    }
+
+    #[cfg(all(feature = "circuit-gen-rs", not(target_family = "wasm")))]
+    fn get_ipfs_uri() -> String {
+        #[cfg(all(not(feature = "sgx"), feature = "std"))]
+        return std::env::var("IPFS_ROOT_URL").unwrap();
+
+        #[cfg(all(not(feature = "std"), feature = "sgx"))]
+        return sgx_tstd::env::var("IPFS_ROOT_URL").unwrap();
+    }
+
+    /// aux function: call API_ENDPOINT_DISPLAY_URL for either is_message or not
+    ///
+    /// return:
+    /// - IPFS hash
+    /// - number of digits
+    #[cfg(all(feature = "circuit-gen-rs", not(target_family = "wasm")))]
+    fn call_grpc_display_one<T: Config>(is_message: bool) -> Result<(String, u32), Error<T>> {
+        let ipfs_client = interstellar_ipfs_client::IpfsClientSpOffchain::new(&get_ipfs_uri())
+            .map_err(|err| {
+                log::error!("[ocw-circuits] ipfs client new error: {:?}", err);
+                <Error<T>>::IpfsClientCreationError
+            })?;
+
+        let (width, height, digits_bboxes) = if is_message {
+            (
+                DEFAULT_MESSAGE_WIDTH,
+                DEFAULT_MESSAGE_HEIGHT,
+                vec![
+                    // first digit bbox --------------------------------------------
+                    0.25_f32, 0.1_f32, 0.45_f32, 0.9_f32,
+                    // second digit bbox -------------------------------------------
+                    0.55_f32, 0.1_f32, 0.75_f32, 0.9_f32,
+                ],
+            )
+        } else {
+            // IMPORTANT: by convention the "pinpad" is 10 digits, placed horizontally(side by side)
+            // DO NOT change the layout, else wallet-app will NOT display the pinpad correctly!
+            // That is b/c this layout in treated as a "texture atlas" so the positions MUST be known.
+            // Ideally the positions SHOULD be passed from here all the way into the serialized .pgarbled/.packmsg
+            // but this NOT YET the case.
+
+            // 10 digits, 4 corners(vertices) per digit
+            let mut digits_bboxes: Vec<f32> = Vec::with_capacity(10 * 4);
+            /*
+            for (int i = 0; i < 10; i++) {
+                digits_bboxes.emplace_back(0.1f * i, 0.0f, 0.1f * (i + 1), 1.0f);
+            }
+            */
+            for i in 0..10 {
+                digits_bboxes.append(
+                    vec![
+                        0.1_f32 * i as f32,
+                        0.0_f32,
+                        0.1_f32 * (i + 1) as f32,
+                        1.0_f32,
+                    ]
+                    .as_mut(),
+                );
+            }
+
+            (DEFAULT_PINPAD_WIDTH, DEFAULT_PINPAD_HEIGHT, digits_bboxes)
+        };
+
+        let circuit = lib_circuits_rs::generate_display_circuit(width, height, &digits_bboxes)
+            .map_err(|err| {
+                log::error!(
+                    "[ocw-circuits] lib_circuits_rs::generate_display_circuit error: {:?} {:?}",
+                    err.to_string(),
+                    err
+                );
+                <Error<T>>::CircuitDisplayGenerateError
+            })?;
+
+        // then serialize "garb" and "packmsg"
+        let serialized_circuit = lib_circuits_rs::serialize(&circuit).map_err(|err| {
+            log::error!(
+                "[ocw-circuits] lib_circuits_rs::serialize error: {:?} {:?}",
+                err.to_string(),
+                err
+            );
+            <Error<T>>::CircuitSerializeError
+        })?;
+
+        // the tests need the full body bytes to mock correctly...
+        #[cfg(test)]
+        let serialized_circuit = T::HookCallPostSerializedPackage::my_test_hook(serialized_circuit);
+
+        let ipfs_add_response = ipfs_client.ipfs_add(&serialized_circuit).map_err(|err| {
+            log::error!("[ocw-circuits] ipfs call ipfs_add error: {:?}", err);
+            <Error<T>>::IpfsCallError
+        })?;
+
+        // nb_digits: we send in the Request one "BBox" per digit(ie 4 floats)
+        // NOTE: if we are here we can guarantee the C++ has checked it was indeed valid BBox so we can / 4 and this is it
+        Ok((
+            ipfs_add_response.hash,
+            (digits_bboxes.len() / 4).try_into().unwrap(),
+        ))
     }
 }

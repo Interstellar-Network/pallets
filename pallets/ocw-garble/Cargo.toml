@@ -1,6 +1,6 @@
 [package]
 name = "pallet-ocw-garble"
-version = "5.0.0"
+version = "6.0.0"
 edition = "2021"
 authors = ['Substrate DevHub <https://github.com/substrate-developer-hub>']
 repository = "https://github.com/jimmychu0807/substrate-offchain-worker-demo"
@@ -8,10 +8,7 @@ description = "A pallet that demonstrates off-chain workers feature in Substrate
 license = "GPL-3.0-or-later"
 
 [package.metadata.substrate]
-categories = [
-	"pallet",
-	"offchain worker",
-]
+categories = ["pallet", "offchain worker"]
 scale-info = { default-features = false, features = ['derive'], version = "2" }
 serde = { version = "1", default-features = false, features = ['derive'] }
 serde_json = { version = "1", default-features = false, features = ['alloc'] }
@@ -28,14 +25,18 @@ rand = { version = "0.8.5", default-features = false }
 bytes = { version = "1", default-features = false }
 hex = { version = "0.4", default-features = false }
 
-http-grpc-client = { default-features = false, git = "https://github.com/Interstellar-Network/rs-common.git", branch = "main" }
+interstellar-http-client = { default-features = false, git = "https://github.com/Interstellar-Network/rs-common.git", branch = "main", features = [
+	"with_http_req",
+], version = "^0.5" }
 pallet-ocw-circuits = { path = "../ocw-circuits", default-features = false }
 pallet-tx-validation = { path = "../tx-validation", default-features = false }
 circuits-storage-common = { path = "../../circuits-storage-common", default-features = false }
 # TODO TOREMOVE
-pallet-timestamp = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.39"}
+pallet-timestamp = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.39" }
 lib-garble-rs = { version = "2.0.0", git = "https://github.com/Interstellar-Network/lib-garble-rs.git", branch = "main", default-features = false }
-ipfs-client-http-req = { git = "https://github.com/Interstellar-Network/lib-garble-rs.git", branch = "main", default-features = false }
+interstellar-ipfs-client = { git = "https://github.com/Interstellar-Network/rs-common.git", branch = "main", default-features = false, features = [
+	"with_http_req",
+], version = "^0.5" }
 
 # prost: could not find a way to use encode() in no_std context...
 # = note: the lang item is first defined in crate `std` (which `byteorder` depends on)
@@ -47,7 +48,7 @@ codec = { package = "parity-scale-codec", version = "3", default-features = fals
 	"derive",
 ] }
 scale-info = { version = "2", default-features = false, features = ["derive"] }
-frame-support = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.39"}
+frame-support = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.39" }
 frame-system = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.39" }
 frame-benchmarking = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.39", optional = true }
 
@@ -86,21 +87,22 @@ std = [
 	"circuits-storage-common/std",
 	"pallet-tx-validation/std",
 	"pallet-ocw-circuits/std",
-	"http-grpc-client/std",
-	"http-grpc-client/with_http_req_std",
+	"interstellar-http-client/std",
+	"interstellar-http-client/with_http_req_std",
+	"interstellar-ipfs-client/std",
 	"lib-garble-rs/std",
-	"ipfs-client-http-req/std",
 	# TEMP
 	# "itp-types/std",
-    # "itp-utils/std",
+	# "itp-utils/std",
 	# "itp-rpc/std",
 	# "substrate-api-client/std",
 ]
 sgx = [
-	"http-grpc-client/sgx",
-	"http-grpc-client/with_http_req_sgx",
+	"interstellar-http-client/sgx",
+	"interstellar-http-client/with_http_req_sgx",
+	"interstellar-ipfs-client/sgx",
+	"pallet-ocw-circuits/sgx",
 	"lib-garble-rs/sgx",
-	"ipfs-client-http-req/sgx",
 	"sgx_tstd",
 	# Needed to match [patch.crates-io] getrandom in enclave-runtime/Cargo.toml
 	# IMPORTANT without this the "seed" in ocw-garble is always the same!
@@ -118,8 +120,8 @@ try-runtime = ["frame-support/try-runtime"]
 env_logger = "0.10"
 test-log = "0.2"
 serial_test = "2"
-
-tests-utils = { default-features = false, git = "https://github.com/Interstellar-Network/rs-common.git", branch = "main" }
-httpmock = "0.6"
 tokio = { version = "*", default-features = false, features = ["rt", "macros"] }
 futures = "0.3"
+httpmock = "0.6"
+
+tests-utils = { default-features = false, git = "https://github.com/Interstellar-Network/rs-common.git", branch = "main" }

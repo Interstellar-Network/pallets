@@ -9,12 +9,23 @@ members = [
 ]
 resolver = "2"
 
+# https://docs.rust-embedded.org/embedonomicon/smallest-no-std.html?search=global_allocator
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"
+
 ################################################################################
 # [patch."https://github.com/Interstellar-Network/lib-garble-rs.git"]
 # lib-garble-rs = { path = "../lib-garble-rs/lib-garble-rs/" }
-# ipfs-client-http-req = { path = "../lib-garble-rs/ipfs-client-http-req/" }
 
 # [patch."https://github.com/Interstellar-Network/rs-common.git"]
-# http-grpc-client = { path = "../rs-common/http-grpc-client/" }
+# interstellar-http-client = { path = "../rs-common/http-client/" }
 # tests-utils = { path = "../rs-common/tests_utils/" }
+# interstellar-ipfs-client = { path = "../rs-common/ipfs-client-http-req/" }
+
+# [patch."https://github.com/Interstellar-Network/lib_circuits.git"]
+# circuit-gen-rs = { path = "../lib_circuits/circuit-gen-rs" }
+# circuit-types-rs = { path = "../lib_circuits/circuit-types-rs" }
 ################################################################################
