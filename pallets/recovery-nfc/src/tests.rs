@@ -12,7 +12,7 @@ fn store_metadata_ok() {
         let ipfs_cid = vec![1, 2];
         let message_digits = vec![3, 4];
         let pinpad_digits = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
-        assert_ok!(RecoveryNfc::store_metadata(
+        assert_ok!(RecoveryNfc::create_recovery_nfc(
             RuntimeOrigin::signed(account_id),
             ipfs_cid.clone(),
             message_digits.clone(),
@@ -43,7 +43,7 @@ fn test_check_input_ok(inputs: Vec<u8>, should_be_ok: bool) {
     new_test_ext().execute_with(|| {
         let account_id = 1;
         let ipfs_cid = vec![1, 2];
-        assert_ok!(RecoveryNfc::store_metadata(
+        assert_ok!(RecoveryNfc::create_recovery_nfc(
             RuntimeOrigin::signed(account_id),
             ipfs_cid.clone(),
             // store_metadata is raw, as-is(no ascii conv)
@@ -95,7 +95,7 @@ fn check_input_invalid_fail_err() {
     new_test_ext().execute_with(|| {
         let account_id = 1;
         let ipfs_cid = vec![1, 2];
-        assert_ok!(RecoveryNfc::store_metadata(
+        assert_ok!(RecoveryNfc::create_recovery_nfc(
             RuntimeOrigin::signed(account_id),
             ipfs_cid.clone(),
             // store_metadata is raw, as-is(no ascii conv)

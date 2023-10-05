@@ -219,7 +219,7 @@ pub mod pallet {
         // NOTE: this is needed only for tests...
         #[pallet::call_index(0)]
         #[pallet::weight(10_000)] // TODO + T::DbWeight::get().writes(1)
-        pub fn store_metadata(
+        pub fn create_recovery_nfc(
             origin: OriginFor<T>,
             message_pgarbled_cid: Vec<u8>,
             message_digits: Vec<u8>,
@@ -230,8 +230,31 @@ pub mod pallet {
             // https://docs.substrate.io/v3/runtime/origins
             let who = ensure_signed(origin)?;
 
+            match pallet_recovery::Recoverable::<T>::contains_key(&who) {
+                true => {
+                    // TODO(recovery)? there is already a Recovery config set up
+                    // in this case we simply try do "do nothing"
+                    // ie DO NOT modify friends,threshold,delay_period
+                    // TODO(recovery)? or do nothing at all?
+                }
+                false => {
+                    // TODO(recovery)? store a new "fake account" and ADD it to the existing Recovery `friends`
+                    // MAYBE we can directly use the current `origin`/`who` for this?
+                    // what are the cons? is this dangerous? what happens when using Social Recovery with self?
+                }
+            }
+            // pallet_recovery::recovery_config(&who);
+            // pallet_recovery::Call::create_recovery {
+            //     friends: (),
+            //     threshold: (),
+            //     delay_period: (),
+            // };
+
             store_metadata_aux::<T>(&who, message_pgarbled_cid, message_digits, pinpad_digits)
         }
+
+        // TODO(recovery) add call forwarding to `initiate_recovery`
+        // or merge with `vouch_recovery` and do some kind of "initiate if needed"?
 
         // NOTE: for now this extrinsic is called from the front-end so input_digits is ascii
         // ie when giving "35" in the text box, we get [51,53]
@@ -252,6 +275,8 @@ pub mod pallet {
                 sp_std::str::from_utf8(&ipfs_cid).expect("ipfs_cid utf8"),
                 input_digits,
             );
+
+            // TODO(recovery) do some CHECKs then `vouch_recovery`
 
             // Compare with storage
             let display_validation_package = <CircuitServerMetadataMap<T>>::get(
