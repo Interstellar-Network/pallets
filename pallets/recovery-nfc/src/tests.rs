@@ -41,28 +41,55 @@ fn store_metadata_ok() {
 /// and the user CAN NOT retry
 fn test_check_input_ok(inputs: Vec<u8>, should_be_ok: bool) {
     new_test_ext().execute_with(|| {
+        // TODO(recovery)?
         let account_id = 1;
-        let ipfs_cid = vec![1, 2];
-        assert_ok!(RecoveryNfc::create_recovery_nfc(
+        // let ipfs_cid = vec![1, 2];
+        // assert_ok!(RecoveryNfc::create_recovery_nfc(
+        //     RuntimeOrigin::signed(account_id),
+        //     ipfs_cid.clone(),
+        //     // store_metadata is raw, as-is(no ascii conv)
+        //     vec![3, 4],
+        //     vec![4, 5, 6, 0, 1, 2, 3, 7, 8, 9],
+        // ));
+
+        // cf pallet-recovery's `recovery_life_cycle_works`
+        let friends = if should_be_ok {
+            vec![account_id]
+        } else {
+            vec![42]
+        };
+        let threshold = 1;
+        let delay_period = 10;
+        // Account 5 sets up a recovery configuration on their account
+        assert_ok!(Recovery::create_recovery(
             RuntimeOrigin::signed(account_id),
-            ipfs_cid.clone(),
-            // store_metadata is raw, as-is(no ascii conv)
-            vec![3, 4],
-            vec![4, 5, 6, 0, 1, 2, 3, 7, 8, 9],
+            friends,
+            threshold,
+            delay_period
         ));
+        // Some time has passed, and the user lost their keys!
+        run_to_block(10);
+        // Using account 1, the user begins the recovery process to recover the lost account
+        assert_ok!(Recovery::initiate_recovery(
+            RuntimeOrigin::signed(account_id),
+            account_id
+        ));
+        // Off chain, the user contacts their friends and asks them to vouch for the recovery
+        // attempt
 
         // Dispatch a signed extrinsic.
-        assert_ok!(RecoveryNfc::check_input(
+        assert_ok!(RecoveryNfc::vouch_with_nfc_tag(
             RuntimeOrigin::signed(account_id),
-            ipfs_cid.clone(),
             inputs
         ));
-        if should_be_ok {
-            System::assert_last_event(crate::Event::TxPass { account_id }.into());
-        } else {
-            System::assert_last_event(crate::Event::TxFail { account_id }.into());
-            // TODO in this case we SHOULD not allow the user to retry; ie cleanup Storage etc
-        }
+
+        // TODO(recovery)?
+        // if should_be_ok {
+        //     System::assert_last_event(crate::Event::TxPass { account_id }.into());
+        // } else {
+        //     System::assert_last_event(crate::Event::TxFail { account_id }.into());
+        //     // TODO in this case we SHOULD not allow the user to retry; ie cleanup Storage etc
+        // }
     });
 }
 
@@ -105,11 +132,8 @@ fn check_input_invalid_fail_err() {
 
         // Dispatch a signed extrinsic.
         // Ensure the expected error is thrown if a wrong input is given
-        let result = RecoveryNfc::check_input(
-            RuntimeOrigin::signed(account_id),
-            ipfs_cid.clone(),
-            vec!['^' as u8],
-        );
+        let result =
+            RecoveryNfc::vouch_with_nfc_tag(RuntimeOrigin::signed(account_id), ipfs_cid.clone());
         assert_err!(result, Error::<Test>::TxInvalidInputsGiven);
         // TODO? should this be a noop?
         // assert_noop!(

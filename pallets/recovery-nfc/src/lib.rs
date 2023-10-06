@@ -17,6 +17,7 @@ mod benchmarking;
 #[frame_support::pallet]
 pub mod pallet {
     use frame_support::pallet_prelude::*;
+    use frame_support::sp_runtime::traits::StaticLookup;
     use frame_system::pallet_prelude::*;
     use sp_std::vec::Vec;
 
@@ -27,63 +28,8 @@ pub mod pallet {
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
     }
 
-    // TODO proper structs instead of tuples for the StorageMap(both key and value)
-    // #[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, Default, scale_info::TypeInfo)]
-    // pub struct CircuitServerMetadata {
-    //     // 20 digits max for now; the current pratical max is 10(10 digits on a pinpad)
-    //     // no real point in displaying even more than 4 on a "message display"
-    //     // TODO BoundedVec
-    //     // digits: BoundedVec<u8, ConstU32<20>>,
-    //     digits: Vec<u8>,
-    // }
-
-    // #[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, Default)]
-    // pub struct CircuitServerMetadataKey<T: Config> {
-    //     // 20 digits max for now; the current pratical max is 10(10 digits on a pinpad)
-    //     // no real point in displaying even more than 4 on a "message display"
-    //     account_id: T::AccountId,
-    //     /// 32 b/c IPFS hash is 256 bits = 32 bytes
-    //     /// Yes we could abuse T::AccountId which is also 32 bytes but that would not be clean
-    //     /// TODO BoundedVec
-    //     // ipfs_cid: BoundedVec<u8, ConstU32<32>>,
-    //     ipfs_cid: Vec<u8>,
-    // }
-
-    // impl MaxEncodedLen for CircuitServerMetadata {
-    //     fn max_encoded_len() -> usize {
-    //         32
-    //     }
-    // }
-
-    // impl<T: Config> MaxEncodedLen for CircuitServerMetadataKey<T> {
-    //     fn max_encoded_len() -> usize {
-    //         32
-    //     }
-    // }
-
-    // impl<T: Config> TypeInfo for CircuitServerMetadataKey<T>
-    // where
-    //     T: TypeInfo + 'static,
-    // {
-    //     type Identity = Self;
-
-    //     fn type_info() -> scale_info::Type {
-    //         scale_info::Type::builder()
-    //             .path(scale_info::Path::new("CircuitServerMetadataKey", module_path!()))
-    //             // .type_params(vec![scale_info::MetaType::new::<T>()])
-    //             .type_params(vec![scale_info::TypeParameter::new(
-    //                 "T",
-    //                 Some(scale_info::meta_type::<CircuitServerMetadataKey<T>>()),
-    //             )])
-    //             .composite(
-    //                 scale_info::build::Fields::named()
-    //                     .field(|f| f.ty::<T>().name("account_id").type_name("T::AccountId"))
-    //                     .field(|f| f.ty::<u64>().name("ipfs_cid").type_name("Vec<u8>")),
-    //             )
-    //     }
-    // }
-
     /// Easy way to make a link b/w a "message" and "pinpad" circuits
+    // TODO(recovery) update structs and corresponding Map
     #[derive(
         Clone,
         Encode,
@@ -167,49 +113,6 @@ pub mod pallet {
         StorageOverflow,
     }
 
-    /// for now we reference the whole "DisplayStrippedCircuitsPackage" by just using the message_pgarbled_cid
-    /// so we only pass "message_pgarbled_cid"
-    pub fn store_metadata_aux<T: Config>(
-        who: &T::AccountId,
-        message_pgarbled_cid: Vec<u8>,
-        message_digits: Vec<u8>,
-        pinpad_digits: Vec<u8>,
-    ) -> DispatchResult {
-        // TODO TOREMOVE
-        // Check that the extrinsic was signed and get the signer.
-        // This function will return an error if the extrinsic is not signed.
-        // https://docs.substrate.io/v3/runtime/origins
-        // let who = ensure_signed(origin)?;
-
-        log::info!(
-            "[tx-validation] store_metadata_aux: who = {:?}, message_pgarbled_cid = {:?}, message_digits = {:?}, pinpad_digits = {:?}",
-            who,
-            sp_std::str::from_utf8(&message_pgarbled_cid).expect("message_pgarbled_cid utf8"),
-            &message_digits,
-            &pinpad_digits,
-        );
-
-        crate::Pallet::<T>::deposit_event(Event::DEBUGNewDigitsSet {
-            message_digits: message_digits.clone(),
-            pinpad_digits: pinpad_digits.clone(),
-        });
-
-        // Update storage.
-        <CircuitServerMetadataMap<T>>::insert(
-            who,
-            TryInto::<BoundedVec<u8, ConstU32<64>>>::try_into(message_pgarbled_cid).unwrap(),
-            DisplayValidationPackage {
-                message_digits: TryInto::<BoundedVec<u8, ConstU32<10>>>::try_into(message_digits)
-                    .unwrap(),
-                pinpad_digits: TryInto::<BoundedVec<u8, ConstU32<10>>>::try_into(pinpad_digits)
-                    .unwrap(),
-            },
-        );
-        log::info!("[tx-validation] store_metadata_aux: done!");
-
-        Ok(())
-    }
-
     // Dispatchable functions allows users to interact with the pallet and invoke state changes.
     // These functions materialize as "extrinsics", which are often compared to transactions.
     // Dispatchable functions must be annotated with a weight and must return a DispatchResult.
@@ -250,96 +153,55 @@ pub mod pallet {
             //     delay_period: (),
             // };
 
-            store_metadata_aux::<T>(&who, message_pgarbled_cid, message_digits, pinpad_digits)
+            Ok(())
         }
 
         // TODO(recovery) add call forwarding to `initiate_recovery`
         // or merge with `vouch_recovery` and do some kind of "initiate if needed"?
 
-        // NOTE: for now this extrinsic is called from the front-end so input_digits is ascii
-        // ie when giving "35" in the text box, we get [51,53]
+        /// Check if NFC S/N is associated with the current account(among other things)
+        /// and if evetything is right, in the end forwards to `pallet_recovery::vouch_recovery`
+        ///
         #[pallet::call_index(1)]
         #[pallet::weight(10_000)] // TODO + T::DbWeight::get().writes(1)
-        pub fn check_input(
-            origin: OriginFor<T>,
-            ipfs_cid: Vec<u8>,
-            input_digits: Vec<u8>,
-        ) -> DispatchResult {
+        pub fn vouch_with_nfc_tag(origin: OriginFor<T>, hashed_nfc_tag: Vec<u8>) -> DispatchResult {
             // Check that the extrinsic was signed and get the signer.
             // This function will return an error if the extrinsic is not signed.
             // https://docs.substrate.io/v3/runtime/origins
-            let who = ensure_signed(origin)?;
+            let who = ensure_signed(origin.clone())?;
             log::info!(
-                "[tx-validation] check_input: who = {:?}, ipfs_cid = {:?}, input_digits = {:?}",
+                "[nfc-recovery] vouch_with_nfc_tag: who = {:?}, hashed_nfc_tag = {:?}",
                 &who,
-                sp_std::str::from_utf8(&ipfs_cid).expect("ipfs_cid utf8"),
-                input_digits,
+                hashed_nfc_tag,
             );
 
-            // TODO(recovery) do some CHECKs then `vouch_recovery`
+            // TODO(recovery) Compare with storage
+            // let display_validation_package = <CircuitServerMetadataMap<T>>::get(
+            //     who.clone(),
+            //     TryInto::<BoundedVec<u8, ConstU32<64>>>::try_into(ipfs_cid).unwrap(),
+            // )
+            // .ok_or(Error::<T>::CircuitNotFound)?;
 
-            // Compare with storage
-            let display_validation_package = <CircuitServerMetadataMap<T>>::get(
-                who.clone(),
-                TryInto::<BoundedVec<u8, ConstU32<64>>>::try_into(ipfs_cid).unwrap(),
-            )
-            .ok_or(Error::<T>::CircuitNotFound)?;
+            // TODO(recovery) do some CHECKs then `vouch_recovery` { lost: (), rescuer: () }
+            //
+            // https://github.com/paritytech/polkadot-sdk/blob/1835c091c42456e8df3ecbf0a94b7b88c395f623/substrate/frame/society/src/benchmarking.rs#L63
+            let who_lookup: <T::Lookup as StaticLookup>::Source = T::Lookup::unlookup(who.clone());
+            pallet_recovery::Pallet::<T>::vouch_recovery(origin, who_lookup.clone(), who_lookup)?;
 
-            // convert ascii to digits
-            // first step: Vec<u8> to str; that way we can then use "to_digit"
-            // DO NOT convert if inputs are [0;9] only convert if they are ['0';'9']
-            // That way if works both using a front-end(usuful for testing/demo) and directly using API/cli(PROD, ie from Android)
-            // TODO test from Android
-            let input_digits_str =
-                sp_std::str::from_utf8(&input_digits).expect("input_digits utf8");
-            let input_digits_int: Vec<u8> = input_digits_str
-                .chars()
-                .map(|c| u8::try_from(c.to_digit(10u32).unwrap_or(c as u32)).unwrap())
-                .collect();
-
-            // use permutation(ie pinpad_digits)
-            let pinpad_permutation = display_validation_package.pinpad_digits;
-            log::info!(
-                "[tx-validation] check_input: input_digits_str = {:?}, input_digits_int = {:?}, pinpad_permutation = {:?}",
-                input_digits_str,
-                input_digits_int,
-                pinpad_permutation,
-            );
-
-            // map user inputs -> true inputs
-            // eg user inputs:          [0,1]
-            // eg pinpad_permutation:   [9,8,7,0,1,...]
-            // true inputs -->          [9,8]
-            let computed_inputs_from_permutation: Result<Vec<u8>, Error<T>> = input_digits_int
-                .into_iter()
-                .map(|pinpad_index| {
-                    pinpad_permutation
-                        .get(pinpad_index as usize)
-                        .ok_or(Error::<T>::TxInvalidInputsGiven)
-                        .map(|idx| *idx)
-                })
-                .collect();
-            let computed_inputs_from_permutation = computed_inputs_from_permutation?;
-            log::info!(
-                "[tx-validation] check_input: computed_inputs_from_permutation = {:?}, message_digits = {:?}",
-                &computed_inputs_from_permutation,
-                &display_validation_package.message_digits
-            );
-
-            // TODO remove the key from the map; we DO NOT want to allow retrying
-            if display_validation_package.message_digits == computed_inputs_from_permutation {
-                log::info!("[tx-validation] TxPass",);
-                crate::Pallet::<T>::deposit_event(Event::TxPass { account_id: who });
-                // TODO on success: call next step/callback (ie pallet-tx-XXX)
-            } else {
-                log::info!("[tx-validation] TxFail",);
-                crate::Pallet::<T>::deposit_event(Event::TxFail { account_id: who });
-                // DO NOT return an Err; that would rollback the tx and allow the user to retry
-                // this is NOT what we want!
-                // We only want to retry if the input are invalid(eg not in [0-9]) NOT if a wrong code is given
-                //
-                // TODO in this case we SHOULD NOT allow the user to retry; ie cleanup Storage etc
-            }
+            // TODO(recovery)
+            // if display_validation_package.message_digits == computed_inputs_from_permutation {
+            //     log::info!("[nfc-recovery] TxPass",);
+            //     crate::Pallet::<T>::deposit_event(Event::TxPass { account_id: who });
+            //     // TODO on success: call next step/callback (ie pallet-tx-XXX)
+            // } else {
+            //     log::info!("[nfc-recovery] TxFail",);
+            //     crate::Pallet::<T>::deposit_event(Event::TxFail { account_id: who });
+            //     // DO NOT return an Err; that would rollback the tx and allow the user to retry
+            //     // this is NOT what we want!
+            //     // We only want to retry if the input are invalid(eg not in [0-9]) NOT if a wrong code is given
+            //     //
+            //     // TODO in this case we SHOULD NOT allow the user to retry; ie cleanup Storage etc
+            // }
 
             Ok(())
         }
