@@ -20,6 +20,7 @@ pub mod pallet {
     use frame_support::sp_runtime::traits::StaticLookup;
     use frame_system::pallet_prelude::*;
     use sp_std::vec::Vec;
+    use std::str::FromStr;
 
     /// Configure the pallet by specifying the parameters and types on which it depends.
     #[pallet::config]
@@ -104,11 +105,6 @@ pub mod pallet {
     #[derive(Clone)]
     #[pallet::error]
     pub enum Error<T> {
-        // The given ipfs_cid was NOT present in CircuitServerMetadataMap
-        CircuitNotFound,
-        // inputs SHOULD be [0;9] or ['0';'9']
-        // and inputs length MUST match expected length
-        TxInvalidInputsGiven,
         /// Errors should have helpful documentation associated with them.
         StorageOverflow,
     }
@@ -118,40 +114,58 @@ pub mod pallet {
     // Dispatchable functions must be annotated with a weight and must return a DispatchResult.
     #[pallet::call]
     impl<T: Config> Pallet<T> {
-        // TODO remove call? how to properly handle calling store_metadata_aux from pallet-ocw-garble???
-        // NOTE: this is needed only for tests...
+        /// and if everything is right, in the end forwards to `pallet_recovery::create_recovery`
+        ///
         #[pallet::call_index(0)]
         #[pallet::weight(10_000)] // TODO + T::DbWeight::get().writes(1)
         pub fn create_recovery_nfc(
             origin: OriginFor<T>,
-            message_pgarbled_cid: Vec<u8>,
-            message_digits: Vec<u8>,
-            pinpad_digits: Vec<u8>,
+            hashed_nfc_tag: Vec<u8>,
         ) -> DispatchResult {
             // Check that the extrinsic was signed and get the signer.
             // This function will return an error if the extrinsic is not signed.
             // https://docs.substrate.io/v3/runtime/origins
-            let who = ensure_signed(origin)?;
+            let who = ensure_signed(origin.clone())?;
 
-            match pallet_recovery::Recoverable::<T>::contains_key(&who) {
-                true => {
+            // TODO(recovery) store hash into Storage
+
+            let who_lookup: <T::Lookup as StaticLookup>::Source = T::Lookup::unlookup(who.clone());
+            match pallet_recovery::Recoverable::<T>::get(&who) {
+                Some(existing_recovery_config) => {
                     // TODO(recovery)? there is already a Recovery config set up
                     // in this case we simply try do "do nothing"
                     // ie DO NOT modify friends,threshold,delay_period
                     // TODO(recovery)? or do nothing at all?
+                    // https://github.com/paritytech/polkadot-sdk/blob/1835c091c42456e8df3ecbf0a94b7b88c395f623/substrate/frame/society/src/benchmarking.rs#L63
+                    // let new_friends = existing_recovery_config.friends + who;
+                    // pallet_recovery::Pallet::<T>::create_recovery(
+                    //     origin,
+                    //     new_friends,
+                    //     existing_recovery_config.threshold + 1,
+                    //     existing_recovery_config.delay_period
+                    // )?;
                 }
-                false => {
+                None => {
                     // TODO(recovery)? store a new "fake account" and ADD it to the existing Recovery `friends`
                     // MAYBE we can directly use the current `origin`/`who` for this?
                     // what are the cons? is this dangerous? what happens when using Social Recovery with self?
+                    // let ten_blocks = <frame_system::Pallet<T>>::block_number()
+                    //     - <frame_system::Pallet<T>>::block_number();
+                    // let ten_blocks: T::BlockNumber = 10;
+                    let ten_blocks = T::BlockNumber::from_str("10").unwrap_or_default();
+                    pallet_recovery::Pallet::<T>::create_recovery(
+                        origin.clone(),
+                        vec![who],
+                        1,
+                        ten_blocks,
+                    )?;
                 }
             }
-            // pallet_recovery::recovery_config(&who);
-            // pallet_recovery::Call::create_recovery {
-            //     friends: (),
-            //     threshold: (),
-            //     delay_period: (),
-            // };
+
+            // TODO(recovery) should probably call initiate_recovery (in both cases?)
+            // Needed else we get Error `NotStarted`
+            // TODO(recovery) SHOULD NOT call if already initiated
+            pallet_recovery::Pallet::<T>::initiate_recovery(origin, who_lookup)?;
 
             Ok(())
         }
@@ -160,7 +174,7 @@ pub mod pallet {
         // or merge with `vouch_recovery` and do some kind of "initiate if needed"?
 
         /// Check if NFC S/N is associated with the current account(among other things)
-        /// and if evetything is right, in the end forwards to `pallet_recovery::vouch_recovery`
+        /// and if everything is right, in the end forwards to `pallet_recovery::vouch_recovery`
         ///
         #[pallet::call_index(1)]
         #[pallet::weight(10_000)] // TODO + T::DbWeight::get().writes(1)
