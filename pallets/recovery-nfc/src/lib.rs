@@ -29,46 +29,17 @@ pub mod pallet {
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
     }
 
-    /// Easy way to make a link b/w a "message" and "pinpad" circuits
-    // TODO(recovery) update structs and corresponding Map
-    #[derive(
-        Clone,
-        Encode,
-        Decode,
-        Eq,
-        PartialEq,
-        RuntimeDebug,
-        Default,
-        scale_info::TypeInfo,
-        MaxEncodedLen,
-    )]
-    pub struct DisplayValidationPackage {
-        // usually only 2-4 digits for the message, and always 10 for the pinpad
-        // but we can take some margin
-        pub message_digits: BoundedVec<u8, ConstU32<10>>,
-        pub pinpad_digits: BoundedVec<u8, ConstU32<10>>,
-    }
-
-    /// Store account -> ipfs_hash -> CircuitServerMetadata; typically at least the OTP/digits/permutation
-    /// This will be checked against user input to pass/fail the current tx
-    // #[pallet::storage]
-    // #[pallet::getter(fn circuit_server_metadata_map)]
-    // pub(super) type CircuitServerMetadataMap<T: Config> =
-    //     StorageMap<_, Twox128, CircuitServerMetadataKey<T>, CircuitServerMetadata, ValueQuery>;
+    /// Store map: account -> "NFC S/N(Serial Number)"
+    /// This will be stored during `create_recovery_nfc` and checked in `vouch_with_nfc_tag`
     #[pallet::storage]
-    #[pallet::getter(fn circuit_server_metadata_map)]
-    pub(super) type CircuitServerMetadataMap<T: Config> = StorageDoubleMap<
+    #[pallet::getter(fn map_account_nfc_tag)]
+    pub(super) type MapAccountNfcTag<T: Config> = StorageMap<
         _,
         Twox128,
         T::AccountId,
-        Twox128,
-        // 32 b/c IPFS hash is 256 bits = 32 bytes
-        // But due to encoding(??) in practice it is 46 bytes(checked with debugger)
-        // TODO for now we reference the whole "DisplayStrippedCircuitsPackage" by just using the message_pgarbled_cid;
-        //      do we need to use the 4 field as the key?
+        // NFC S/N seems to be at least 4 bytes, and possibly 8-12?
+        // But we store a HASH of it, so we want at 256 bits(and 512 to be future proof)
         BoundedVec<u8, ConstU32<64>>,
-        //  Struct containing both message_digits and pinpad_digits
-        DisplayValidationPackage,
         // TODO?
         // ValueQuery,
     >;
@@ -87,26 +58,18 @@ pub mod pallet {
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
-        /// One of those is emitted at the end of the tx validation
-        TxPass {
-            account_id: T::AccountId,
-        },
-        TxFail {
-            account_id: T::AccountId,
-        },
-        /// DEBUG ONLY
-        DEBUGNewDigitsSet {
-            message_digits: Vec<u8>,
-            pinpad_digits: Vec<u8>,
-        },
+        /// Emitted at the end of `vouch_with_nfc_tag` when everything was OK
+        VouchedWithNfc { account_id: T::AccountId },
+        /// Emitted at the end of `vouch_with_nfc_tag` if the NFC S/N is not the correct one
+        InvalidNfcSn { account_id: T::AccountId },
     }
 
     // Errors inform users that something went wrong.
-    #[derive(Clone)]
     #[pallet::error]
     pub enum Error<T> {
-        /// Errors should have helpful documentation associated with them.
-        StorageOverflow,
+        /// Trying to call `vouch_with_nfc_tag` WITHOUT having called `create_recovery_nfc`
+        /// ie there is no entry for current account in `MapAccountNfcTag`
+        AccountNfcTagMissing,
     }
 
     // Dispatchable functions allows users to interact with the pallet and invoke state changes.
@@ -114,6 +77,8 @@ pub mod pallet {
     // Dispatchable functions must be annotated with a weight and must return a DispatchResult.
     #[pallet::call]
     impl<T: Config> Pallet<T> {
+        // TODO(recovery) SHOULD probabably receive a 'nfc_sn' in clear; and hash in the calls
+
         /// and if everything is right, in the end forwards to `pallet_recovery::create_recovery`
         ///
         #[pallet::call_index(0)]
@@ -127,11 +92,8 @@ pub mod pallet {
             // https://docs.substrate.io/v3/runtime/origins
             let who = ensure_signed(origin.clone())?;
 
-            // TODO(recovery) store hash into Storage
-
-            let who_lookup: <T::Lookup as StaticLookup>::Source = T::Lookup::unlookup(who.clone());
             match pallet_recovery::Recoverable::<T>::get(&who) {
-                Some(existing_recovery_config) => {
+                Some(_existing_recovery_config) => {
                     // TODO(recovery)? there is already a Recovery config set up
                     // in this case we simply try do "do nothing"
                     // ie DO NOT modify friends,threshold,delay_period
@@ -155,26 +117,32 @@ pub mod pallet {
                     let ten_blocks = T::BlockNumber::from_str("10").unwrap_or_default();
                     pallet_recovery::Pallet::<T>::create_recovery(
                         origin.clone(),
-                        vec![who],
+                        vec![who.clone()],
                         1,
                         ten_blocks,
                     )?;
                 }
             }
 
-            // TODO(recovery) should probably call initiate_recovery (in both cases?)
-            // Needed else we get Error `NotStarted`
-            // TODO(recovery) SHOULD NOT call if already initiated
-            pallet_recovery::Pallet::<T>::initiate_recovery(origin, who_lookup)?;
+            // Store hash into Storage
+            // Will be compared in `vouch_with_nfc_tag`
+            MapAccountNfcTag::<T>::insert(
+                who,
+                TryInto::<BoundedVec<u8, ConstU32<64>>>::try_into(hashed_nfc_tag).unwrap(),
+            );
 
             Ok(())
         }
 
         // TODO(recovery) add call forwarding to `initiate_recovery`
         // or merge with `vouch_recovery` and do some kind of "initiate if needed"?
+        // or better(cf current) make calling `initiate_recovery` a PREREQ of `vouch` which simplifies the process
 
         /// Check if NFC S/N is associated with the current account(among other things)
         /// and if everything is right, in the end forwards to `pallet_recovery::vouch_recovery`
+        ///
+        /// PREREQ
+        /// - `pallet_recovery::initiate_recovery` MUST have been called before
         ///
         #[pallet::call_index(1)]
         #[pallet::weight(10_000)] // TODO + T::DbWeight::get().writes(1)
@@ -189,33 +157,30 @@ pub mod pallet {
                 hashed_nfc_tag,
             );
 
-            // TODO(recovery) Compare with storage
-            // let display_validation_package = <CircuitServerMetadataMap<T>>::get(
-            //     who.clone(),
-            //     TryInto::<BoundedVec<u8, ConstU32<64>>>::try_into(ipfs_cid).unwrap(),
-            // )
-            // .ok_or(Error::<T>::CircuitNotFound)?;
+            // https://github.com/paritytech/polkadot-sdk/blob/1835c091c42456e8df3ecbf0a94b7b88c395f623/substrate/frame/society/src/benchmarking.rs#L63
+            let who_lookup: <T::Lookup as StaticLookup>::Source = T::Lookup::unlookup(who.clone());
+
+            // Compare with storage
+            // TODO(recovery) same question than "InvalidNfcTag" below
+            let expected_nfc_tag =
+                <MapAccountNfcTag<T>>::get(who.clone()).ok_or(Error::<T>::AccountNfcTagMissing)?;
+
+            // TODO(recovery) SHOULD this be an error? we WANT the caller to pay if the wrong NFC tag is given
+            // how does that work?
+            // DO NOT return an Err; that would rollback the tx and allow the user to retry
+            // this is NOT what we want!
+            if expected_nfc_tag != hashed_nfc_tag {
+                log::info!("[nfc-recovery] InvalidNfcTag",);
+                crate::Pallet::<T>::deposit_event(Event::InvalidNfcSn { account_id: who });
+                return Ok(());
+            }
 
             // TODO(recovery) do some CHECKs then `vouch_recovery` { lost: (), rescuer: () }
             //
-            // https://github.com/paritytech/polkadot-sdk/blob/1835c091c42456e8df3ecbf0a94b7b88c395f623/substrate/frame/society/src/benchmarking.rs#L63
-            let who_lookup: <T::Lookup as StaticLookup>::Source = T::Lookup::unlookup(who.clone());
             pallet_recovery::Pallet::<T>::vouch_recovery(origin, who_lookup.clone(), who_lookup)?;
 
-            // TODO(recovery)
-            // if display_validation_package.message_digits == computed_inputs_from_permutation {
-            //     log::info!("[nfc-recovery] TxPass",);
-            //     crate::Pallet::<T>::deposit_event(Event::TxPass { account_id: who });
-            //     // TODO on success: call next step/callback (ie pallet-tx-XXX)
-            // } else {
-            //     log::info!("[nfc-recovery] TxFail",);
-            //     crate::Pallet::<T>::deposit_event(Event::TxFail { account_id: who });
-            //     // DO NOT return an Err; that would rollback the tx and allow the user to retry
-            //     // this is NOT what we want!
-            //     // We only want to retry if the input are invalid(eg not in [0-9]) NOT if a wrong code is given
-            //     //
-            //     // TODO in this case we SHOULD NOT allow the user to retry; ie cleanup Storage etc
-            // }
+            log::info!("[nfc-recovery] done!",);
+            crate::Pallet::<T>::deposit_event(Event::VouchedWithNfc { account_id: who });
 
             Ok(())
         }

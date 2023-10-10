@@ -1,10 +1,14 @@
-use crate::{mock::*, Error};
-use frame_support::assert_ok;
 use frame_support::pallet_prelude::ConstU32;
-use frame_support::{assert_err, BoundedVec};
+use frame_support::pallet_prelude::DispatchError;
+use frame_support::{assert_err, assert_ok};
+use sp_runtime::traits::Lookup;
+use sp_runtime::ModuleError;
 use test_log::test;
 
-fn setup_create_recovery(account_id: u64, should_be_ok: bool) {
+use crate::{mock::*, Config, Error};
+
+fn setup_create_recovery(account_id: u64, should_be_ok: bool, hashed_nfc_tag: &[u8]) {
+    let origin = RuntimeOrigin::signed(account_id);
     // cf pallet-recovery's `recovery_life_cycle_works`
     let friends = if should_be_ok {
         vec![account_id]
@@ -15,13 +19,21 @@ fn setup_create_recovery(account_id: u64, should_be_ok: bool) {
     let delay_period = 10;
     // Account 5 sets up a recovery configuration on their account
     assert_ok!(Recovery::create_recovery(
-        RuntimeOrigin::signed(account_id),
+        origin.clone(),
         friends,
         threshold,
         delay_period
     ));
+
     // Some time has passed, and the user lost their keys!
     run_to_block(10);
+
+    if should_be_ok {
+        assert_ok!(RecoveryNfc::create_recovery_nfc(
+            origin.clone(),
+            hashed_nfc_tag.to_vec(),
+        ));
+    }
 }
 
 /// When expecting 2 digits, giving eg 4 inputs SHOULD graciously fail
@@ -31,7 +43,7 @@ fn setup_create_recovery(account_id: u64, should_be_ok: bool) {
 ///
 /// NOTE: this DOES NOT return an Err; that way the tx IS NOT rollbacked
 /// and the user CAN NOT retry
-fn test_check_input_ok(inputs: Vec<u8>, should_be_ok: bool) {
+fn test_check_input_ok(hashed_nfc_tag: Vec<u8>, should_be_ok: bool) {
     new_test_ext().execute_with(|| {
         // TODO(recovery)?
         let account_id = 1;
@@ -44,7 +56,7 @@ fn test_check_input_ok(inputs: Vec<u8>, should_be_ok: bool) {
         //     vec![4, 5, 6, 0, 1, 2, 3, 7, 8, 9],
         // ));
 
-        setup_create_recovery(account_id, true);
+        setup_create_recovery(account_id, true, &hashed_nfc_tag);
 
         // Using account 1, the user begins the recovery process to recover the lost account
         assert_ok!(Recovery::initiate_recovery(
@@ -57,7 +69,7 @@ fn test_check_input_ok(inputs: Vec<u8>, should_be_ok: bool) {
         // Dispatch a signed extrinsic.
         assert_ok!(RecoveryNfc::vouch_with_nfc_tag(
             RuntimeOrigin::signed(account_id),
-            inputs
+            hashed_nfc_tag
         ));
 
         // TODO(recovery)?
@@ -96,15 +108,18 @@ fn check_recovery_life_cycle_without_existing_recovery_ok() {
     new_test_ext().execute_with(|| {
         let account_id = 1;
         let hashed_nfc_tag = vec![3, 4];
+        let origin = RuntimeOrigin::signed(account_id);
         assert_ok!(RecoveryNfc::create_recovery_nfc(
-            RuntimeOrigin::signed(account_id),
+            origin.clone(),
             hashed_nfc_tag.clone(),
         ));
 
+        // PREREQ pallet_recovery::initiate_recovery
+        Recovery::initiate_recovery(origin.clone(), account_id).unwrap();
+
         // Dispatch a signed extrinsic.
         // Ensure the expected error is thrown if a wrong input is given
-        let result =
-            RecoveryNfc::vouch_with_nfc_tag(RuntimeOrigin::signed(account_id), hashed_nfc_tag);
+        let result = RecoveryNfc::vouch_with_nfc_tag(origin.clone(), hashed_nfc_tag);
         assert_ok!(result);
         // TODO? should this be a noop?
         // assert_noop!(
@@ -112,11 +127,17 @@ fn check_recovery_life_cycle_without_existing_recovery_ok() {
         //     Error::<Test>::TxWrongInputGiven
         // );
 
-        System::assert_last_event(
+        System::assert_has_event(
             pallet_recovery::Event::RecoveryVouched {
-                lost_account: 1,
-                rescuer_account: 1,
-                sender: 1,
+                lost_account: account_id,
+                rescuer_account: account_id,
+                sender: account_id,
+            }
+            .into(),
+        );
+        System::assert_last_event(
+            crate::Event::VouchedWithNfc {
+                account_id: account_id,
             }
             .into(),
         );
@@ -127,24 +148,56 @@ fn check_recovery_life_cycle_without_existing_recovery_ok() {
 fn check_recovery_life_cycle_with_existing_recovery_ok() {
     new_test_ext().execute_with(|| {
         let account_id = 1;
-
-        setup_create_recovery(account_id, true);
-
+        let origin = RuntimeOrigin::signed(account_id);
         let hashed_nfc_tag = vec![3, 4];
-        assert_ok!(RecoveryNfc::create_recovery_nfc(
-            RuntimeOrigin::signed(account_id),
-            hashed_nfc_tag.clone(),
-        ));
+
+        setup_create_recovery(account_id, true, &hashed_nfc_tag);
+
+        // PREREQ pallet_recovery::initiate_recovery
+        Recovery::initiate_recovery(origin.clone(), account_id).unwrap();
 
         // Dispatch a signed extrinsic.
         // Ensure the expected error is thrown if a wrong input is given
-        let result =
-            RecoveryNfc::vouch_with_nfc_tag(RuntimeOrigin::signed(account_id), hashed_nfc_tag);
+        let result = RecoveryNfc::vouch_with_nfc_tag(origin.clone(), hashed_nfc_tag);
         assert_ok!(result);
         // TODO? should this be a noop?
         // assert_noop!(
         //     RecoveryNfc::check_input(Origin::signed(account_id), ipfs_cid.clone(), vec![0, 0]),
         //     Error::<Test>::TxWrongInputGiven
         // );
+    });
+}
+
+#[test]
+fn check_recovery_life_cycle_vouch_wrong_tag_should_fail() {
+    new_test_ext().execute_with(|| {
+        let account_id = 1;
+        let origin = RuntimeOrigin::signed(account_id);
+        let hashed_nfc_tag_setup = vec![3, 4];
+        let hashed_nfc_tag_vouch = vec![5, 6];
+
+        setup_create_recovery(account_id, true, &hashed_nfc_tag_setup);
+
+        // PREREQ pallet_recovery::initiate_recovery
+        Recovery::initiate_recovery(origin.clone(), account_id).unwrap();
+
+        // Dispatch a signed extrinsic.
+        // Ensure the expected error is thrown if a wrong input is given
+        let result = RecoveryNfc::vouch_with_nfc_tag(origin.clone(), hashed_nfc_tag_vouch);
+        // assert_err!(
+        //     result,
+        //     DispatchError::Module(ModuleError {
+        //         index: 3,
+        //         error: [1, 0, 0, 0],
+        //         message: Some("InvalidNfcTag")
+        //     })
+        // );
+        assert_ok!(result);
+        System::assert_last_event(
+            crate::Event::InvalidNfcSn {
+                account_id: account_id,
+            }
+            .into(),
+        );
     });
 }
