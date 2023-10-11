@@ -18,7 +18,7 @@ mod benchmarking;
 pub mod pallet {
     use frame_support::pallet_prelude::*;
     use frame_support::sp_runtime::traits::StaticLookup;
-    use frame_system::pallet_prelude::*;
+    use frame_system::{pallet_prelude::*, RawOrigin};
     use sp_std::vec::Vec;
     use std::str::FromStr;
 
@@ -31,15 +31,17 @@ pub mod pallet {
 
     /// Store map: account -> "NFC S/N(Serial Number)"
     /// This will be stored during `create_recovery_nfc` and checked in `vouch_with_nfc_tag`
+    /// NOTE: yes, the key is the S/N; that is b/c the AccountId from `vouch_with_nfc_tag` is NOT
+    /// the one used during setup!
     #[pallet::storage]
     #[pallet::getter(fn map_account_nfc_tag)]
     pub(super) type MapAccountNfcTag<T: Config> = StorageMap<
         _,
         Twox128,
-        T::AccountId,
         // NFC S/N seems to be at least 4 bytes, and possibly 8-12?
         // But we store a HASH of it, so we want at 256 bits(and 512 to be future proof)
         BoundedVec<u8, ConstU32<64>>,
+        T::AccountId,
         // TODO?
         // ValueQuery,
     >;
@@ -60,17 +62,15 @@ pub mod pallet {
     pub enum Event<T: Config> {
         /// Emitted at the end of `vouch_with_nfc_tag` when everything was OK
         VouchedWithNfc { account_id: T::AccountId },
+        /// Trying to call `vouch_with_nfc_tag` WITHOUT having called `create_recovery_nfc`
+        /// ie there is no entry for current account in `MapAccountNfcTag`
         /// Emitted at the end of `vouch_with_nfc_tag` if the NFC S/N is not the correct one
-        InvalidNfcSn { account_id: T::AccountId },
+        UnknownAccount { account_id: T::AccountId },
     }
 
     // Errors inform users that something went wrong.
     #[pallet::error]
-    pub enum Error<T> {
-        /// Trying to call `vouch_with_nfc_tag` WITHOUT having called `create_recovery_nfc`
-        /// ie there is no entry for current account in `MapAccountNfcTag`
-        AccountNfcTagMissing,
-    }
+    pub enum Error<T> {}
 
     // Dispatchable functions allows users to interact with the pallet and invoke state changes.
     // These functions materialize as "extrinsics", which are often compared to transactions.
@@ -127,8 +127,8 @@ pub mod pallet {
             // Store hash into Storage
             // Will be compared in `vouch_with_nfc_tag`
             MapAccountNfcTag::<T>::insert(
-                who,
                 TryInto::<BoundedVec<u8, ConstU32<64>>>::try_into(hashed_nfc_tag).unwrap(),
+                who,
             );
 
             Ok(())
@@ -157,27 +157,38 @@ pub mod pallet {
                 hashed_nfc_tag,
             );
 
-            // https://github.com/paritytech/polkadot-sdk/blob/1835c091c42456e8df3ecbf0a94b7b88c395f623/substrate/frame/society/src/benchmarking.rs#L63
-            let who_lookup: <T::Lookup as StaticLookup>::Source = T::Lookup::unlookup(who.clone());
-
             // Compare with storage
             // TODO(recovery) same question than "InvalidNfcTag" below
-            let expected_nfc_tag =
-                <MapAccountNfcTag<T>>::get(who.clone()).ok_or(Error::<T>::AccountNfcTagMissing)?;
+            // : frame_system::RawOrigin<T::AccountId>
+            let lost_account_id = match <MapAccountNfcTag<T>>::get(
+                TryInto::<BoundedVec<u8, ConstU32<64>>>::try_into(hashed_nfc_tag).unwrap(),
+            ) {
+                Some(lost_account_id) => lost_account_id,
+                // match lost_account_id {
+                //     frame_system::RawOrigin::Root => todo!(),
+                //     frame_system::RawOrigin::Signed(lost_origin_signed) => lost_origin_signed,
+                //     frame_system::RawOrigin::None => todo!(),
+                // }
+                None => {
+                    // TODO(recovery) SHOULD this be an error? we WANT the caller to pay if the wrong NFC tag is given
+                    // how does that work?
+                    // DO NOT return an Err; that would rollback the tx and allow the user to retry
+                    // this is NOT what we want!
+                    log::info!("[nfc-recovery] InvalidNfcTag",);
+                    crate::Pallet::<T>::deposit_event(Event::UnknownAccount { account_id: who });
+                    return Ok(());
+                }
+            };
 
-            // TODO(recovery) SHOULD this be an error? we WANT the caller to pay if the wrong NFC tag is given
-            // how does that work?
-            // DO NOT return an Err; that would rollback the tx and allow the user to retry
-            // this is NOT what we want!
-            if expected_nfc_tag != hashed_nfc_tag {
-                log::info!("[nfc-recovery] InvalidNfcTag",);
-                crate::Pallet::<T>::deposit_event(Event::InvalidNfcSn { account_id: who });
-                return Ok(());
-            }
+            // https://github.com/paritytech/polkadot-sdk/blob/1835c091c42456e8df3ecbf0a94b7b88c395f623/substrate/frame/society/src/benchmarking.rs#L63
+            let lost_lookup: <T::Lookup as StaticLookup>::Source =
+                T::Lookup::unlookup(lost_account_id.clone());
 
-            // TODO(recovery) do some CHECKs then `vouch_recovery` { lost: (), rescuer: () }
-            //
-            pallet_recovery::Pallet::<T>::vouch_recovery(origin, who_lookup.clone(), who_lookup)?;
+            pallet_recovery::Pallet::<T>::vouch_recovery(
+                RawOrigin::from(Some(lost_account_id)).into(),
+                lost_lookup.clone(),
+                lost_lookup,
+            )?;
 
             log::info!("[nfc-recovery] done!",);
             crate::Pallet::<T>::deposit_event(Event::VouchedWithNfc { account_id: who });
