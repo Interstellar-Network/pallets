@@ -81,10 +81,11 @@ pub mod pallet {
     // Resolutions for the "message" mode and the "pinpad" mode
     // There are no good/bad ones, it is only trial and error.
     // You SHOULD use lib_circuits's cli_display_skcd to try and find good ones.
+    // cf /lib_circuits/circuit-gen-rs/examples/display_generate_and_evaluate.rs (comments at the top)
     #[cfg(all(feature = "circuit-gen-rs", not(target_family = "wasm")))]
-    const DEFAULT_MESSAGE_WIDTH: u32 = 1280 / 2;
+    const DEFAULT_MESSAGE_WIDTH: u32 = 400;
     #[cfg(all(feature = "circuit-gen-rs", not(target_family = "wasm")))]
-    const DEFAULT_MESSAGE_HEIGHT: u32 = 720 / 2;
+    const DEFAULT_MESSAGE_HEIGHT: u32 = 288;
     #[cfg(all(feature = "circuit-gen-rs", not(target_family = "wasm")))]
     const DEFAULT_PINPAD_WIDTH: u32 = 590;
     #[cfg(all(feature = "circuit-gen-rs", not(target_family = "wasm")))]
@@ -658,40 +659,14 @@ pub mod pallet {
             (
                 DEFAULT_MESSAGE_WIDTH,
                 DEFAULT_MESSAGE_HEIGHT,
-                vec![
-                    // first digit bbox --------------------------------------------
-                    0.25_f32, 0.1_f32, 0.45_f32, 0.9_f32,
-                    // second digit bbox -------------------------------------------
-                    0.55_f32, 0.1_f32, 0.75_f32, 0.9_f32,
-                ],
+                lib_circuits_rs::get_default_message_bbox(),
             )
         } else {
-            // IMPORTANT: by convention the "pinpad" is 10 digits, placed horizontally(side by side)
-            // DO NOT change the layout, else wallet-app will NOT display the pinpad correctly!
-            // That is b/c this layout in treated as a "texture atlas" so the positions MUST be known.
-            // Ideally the positions SHOULD be passed from here all the way into the serialized .pgarbled/.packmsg
-            // but this NOT YET the case.
-
-            // 10 digits, 4 corners(vertices) per digit
-            let mut digits_bboxes: Vec<f32> = Vec::with_capacity(10 * 4);
-            /*
-            for (int i = 0; i < 10; i++) {
-                digits_bboxes.emplace_back(0.1f * i, 0.0f, 0.1f * (i + 1), 1.0f);
-            }
-            */
-            for i in 0..10 {
-                digits_bboxes.append(
-                    vec![
-                        0.1_f32 * i as f32,
-                        0.0_f32,
-                        0.1_f32 * (i + 1) as f32,
-                        1.0_f32,
-                    ]
-                    .as_mut(),
-                );
-            }
-
-            (DEFAULT_PINPAD_WIDTH, DEFAULT_PINPAD_HEIGHT, digits_bboxes)
+            (
+                DEFAULT_PINPAD_WIDTH,
+                DEFAULT_PINPAD_HEIGHT,
+                lib_circuits_rs::get_default_pinpad_bboxes(),
+            )
         };
 
         let circuit = lib_circuits_rs::generate_display_circuit(width, height, &digits_bboxes)

@@ -4,6 +4,7 @@ members = [
     "pallets/mobile-registry",
     "pallets/ocw-circuits",
     "pallets/ocw-garble",
+    "pallets/recovery-nfc",
     "pallets/tx-registry",
     "pallets/tx-validation",
 ]
