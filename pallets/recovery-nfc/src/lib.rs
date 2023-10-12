@@ -1,5 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
+extern crate alloc;
+
 /// Edit this file to define custom logic or remove it if it is not needed.
 /// Learn more about FRAME and the core library of Substrate FRAME pallets:
 /// <https://docs.substrate.io/v3/runtime/frame>
@@ -16,11 +18,15 @@ mod benchmarking;
 
 #[frame_support::pallet]
 pub mod pallet {
+    use alloc::vec;
     use frame_support::pallet_prelude::*;
     use frame_support::sp_runtime::traits::StaticLookup;
     use frame_system::{pallet_prelude::*, RawOrigin};
     use sp_std::vec::Vec;
     use std::str::FromStr;
+
+    #[cfg(feature = "sgx")]
+    use sgx_tstd as std;
 
     /// Configure the pallet by specifying the parameters and types on which it depends.
     #[pallet::config]

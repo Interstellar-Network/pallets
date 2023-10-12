@@ -22,6 +22,8 @@ frame-system = { default-features = false, git = "https://github.com/paritytech/
 frame-benchmarking = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.39", optional = true }
 sp-std = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.39" }
 
+sgx_tstd = { branch = "master", git = "https://github.com/apache/teaclave-sgx-sdk.git", optional = true }
+
 pallet-recovery = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.39" }
 
 [dev-dependencies]
@@ -46,6 +48,7 @@ std = [
 	"sp-std/std",
 	"log/std",
 ]
+sgx = ["sgx_tstd"]
 
 runtime-benchmarks = ["frame-benchmarking/runtime-benchmarks"]
 try-runtime = ["frame-support/try-runtime"]
