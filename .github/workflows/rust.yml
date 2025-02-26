@@ -93,7 +93,8 @@ jobs:
   ##############################################################################
   # NOTE: pallet-ocw-circuits is no_std, but pallet-ocw-garble is SGX
   sgx:
-    runs-on: ubuntu-latest
+    # Seems to be stuck on 22.04 cf https://github.com/integritee-network/integritee-dev/blob/e8f9d8d44f0ef89ffecfe796e8f9c35120f73c47/worker/Dockerfile#L21
+    runs-on: ubuntu-22.04
     steps:
       ##########################################################################
 
@@ -127,14 +128,19 @@ jobs:
 
       ##########################################################################
 
-      - uses: Interstellar-Network/gh-actions/install-sgx-sdk@v3-dev
+      # version SHOULD match https://github.com/integritee-network/worker/blob/a1238ccf188f8b1a8acf7477011a0cdf81f80464/rust-toolchain.toml#L2
+      - run: cargo +nightly-2022-10-22 check --no-default-features --target=wasm32-unknown-unknown
 
-      # cf core-primitives/enclave-api/build.rs and service/build.rs
-      - name: Build SGX samplecode
-        run: |
-          cd tests_sgx
-          export CUSTOM_EDL_PATH=$PWD/edl
-          export CUSTOM_COMMON_PATH=$PWD/common
-          (cd samplecode/project_template && make clean && make && cd bin/ && ./app)
-        shell: bash
+      ##########################################################################
+
+      # - uses: Interstellar-Network/gh-actions/install-sgx-sdk@v3-dev
+      #
+      # # cf core-primitives/enclave-api/build.rs and service/build.rs
+      # - name: Build SGX samplecode
+      #   run: |
+      #     cd tests_sgx
+      #     export CUSTOM_EDL_PATH=$PWD/edl
+      #     export CUSTOM_COMMON_PATH=$PWD/common
+      #     (cd samplecode/project_template && make clean && make && cd bin/ && ./app)
+      #   shell: bash
 # TODO add wasm; at least for pallet-ocw-circuits
