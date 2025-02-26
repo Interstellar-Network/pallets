@@ -31,8 +31,6 @@ interstellar-http-client = { default-features = false, git = "https://github.com
 pallet-ocw-circuits = { path = "../ocw-circuits", default-features = false }
 pallet-tx-validation = { path = "../tx-validation", default-features = false }
 circuits-storage-common = { path = "../../circuits-storage-common", default-features = false }
-# TODO TOREMOVE
-pallet-timestamp = { default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.39" }
 lib-garble-rs = { version = "2.0.0", git = "https://github.com/Interstellar-Network/lib-garble-rs.git", branch = "main", default-features = false }
 interstellar-ipfs-client = { git = "https://github.com/Interstellar-Network/rs-common.git", branch = "main", default-features = false, features = [
 	"with_http_req",

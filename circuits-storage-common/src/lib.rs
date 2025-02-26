@@ -1,10 +1,10 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use codec::{Decode, Encode};
 use frame_support::pallet_prelude::ConstU32;
 use frame_support::pallet_prelude::MaxEncodedLen;
 use frame_support::BoundedVec;
 use frame_support::RuntimeDebug;
+use parity_scale_codec::{Decode, Encode};
 
 /// Easy way to make a link b/w a "message" and "pinpad" circuits
 /// that way we can have ONE extrinsic that generates both in one call

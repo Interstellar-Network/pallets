@@ -10,10 +10,10 @@ extern crate alloc;
 
 use alloc::string::String;
 use alloc::string::ToString;
-use codec::{Decode, Encode};
 use frame_system::ensure_signed;
 use frame_system::offchain::AppCrypto;
 use frame_system::offchain::CreateSignedTransaction;
+use parity_scale_codec::{Decode, Encode};
 use rand::seq::SliceRandom;
 use rand::Rng;
 use rand_chacha::{rand_core::SeedableRng, ChaChaRng};

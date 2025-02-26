@@ -10,9 +10,8 @@ use sp_core::{
     sr25519::Signature,
     H256,
 };
-use sp_keystore::testing::KeyStore;
+use sp_keystore::Keystore;
 use sp_keystore::KeystoreExt;
-use sp_keystore::SyncCryptoStore;
 use sp_runtime::{
     testing::{Header, TestXt},
     traits::{BlakeTwo256, Extrinsic as ExtrinsicT, IdentifyAccount, IdentityLookup, Verify},
@@ -156,16 +155,16 @@ pub(crate) async fn new_test_ext(
     let (offchain, state) = testing::TestOffchainExt::with_offchain_db(offchain_db);
     let (pool, _state) = testing::TestTransactionPoolExt::new();
     // https://github.com/JoshOrndorff/recipes/blob/03b7a0657727705faa5f840c73bcf15ffdd81f2b/pallets/ocw-demo/src/tests.rs#L112C3-L113C77
-    const PHRASE: &str = "expire stage crawl shell boss any story swamp skull yellow bamboo copy";
-    let keystore = KeyStore::new();
-    keystore
-        .sr25519_generate_new(KEY_TYPE, Some(&format!("{}/hunter1", PHRASE)))
-        .unwrap();
+    //const PHRASE: &str = "expire stage crawl shell boss any story swamp skull yellow bamboo copy";
+    //let keystore = Keystore::new();
+    //keystore
+    //    .sr25519_generate_new(KEY_TYPE, Some(&format!("{}/hunter1", PHRASE)))
+    //    .unwrap();
 
     t.register_extension(OffchainDbExt::new(offchain.clone()));
     t.register_extension(OffchainWorkerExt::new(offchain));
     t.register_extension(TransactionPoolExt::new(pool));
-    t.register_extension(KeystoreExt(Arc::new(keystore)));
+    //t.register_extension(KeystoreExt(Arc::new(keystore)));
 
     const MOCK_IPFS_ROOT_URL: &str = "http://127.0.0.1:4242";
     std::env::set_var("IPFS_ROOT_URL", MOCK_IPFS_ROOT_URL);
