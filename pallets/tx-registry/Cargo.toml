@@ -26,8 +26,8 @@ sp-core = { workspace = true }
 sp-io = { workspace = true }
 sp-runtime = { workspace = true }
 
-env_logger = "0.10.0"
-test-log = "0.2"
+env_logger = { workspace = true } 
+test-log = { workspace = true }
 
 [features]
 default = ["std"]

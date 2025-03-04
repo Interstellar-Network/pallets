@@ -129,6 +129,7 @@ jobs:
       ##########################################################################
 
       # version SHOULD match https://github.com/integritee-network/worker/blob/a1238ccf188f8b1a8acf7477011a0cdf81f80464/rust-toolchain.toml#L2
+      - run: cargo +nightly-2022-10-22 test --manifest-path compat/Cargo.toml
       - run: cargo +nightly-2022-10-22 check --no-default-features --target=wasm32-unknown-unknown
 
       ##########################################################################

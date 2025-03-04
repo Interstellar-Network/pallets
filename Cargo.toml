@@ -18,13 +18,18 @@ panic = "abort"
 
 [workspace.dependencies]
 log = { version = "0.4", default-features = false }
+env_logger = { version = "<0.11" }
+test-log = "<0.2.14"
+# Check Tokio MSRV at: https://github.com/tokio-rs/tokio?tab=readme-ov-file#supported-rust-versions
+# [NOTE: change branch if needed]
+tokio = { version = "<1.39", default-features = false, features = ["rt", "macros"] }
 
 # Prepare for https://github.com/integritee-network/pallets/blob/3cd57250f694e7dc931d48686eacac8505481c87/Cargo.toml#L28
 # but for now using the versions from https://github.com/integritee-network/pallets/blob/b07c044856aca63b5e07a401da676fffaadae48a/primitives/claims/Cargo.toml#L16
 frame-benchmarking = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.42" }
 frame-support = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.42" }
 frame-system = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.42" }
-parity-scale-codec = { version = "3.0.0", default-features = false, features = ["derive"] }
+parity-scale-codec = { version = "<3.7", default-features = false, features = ["derive"] }
 scale-info = { version = "2.0.1", default-features = false, features = ["derive"] }
 sp-core = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.42" }
 sp-io = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.42" }
@@ -32,14 +37,35 @@ sp-runtime = { default-features = false, git = "https://github.com/paritytech/su
 sp-std = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.42" }
 sp-keystore = { default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.42" }
 
+###############################################################################
+# COMPAT for old Rust...
+# [patch.crates-io]
+
+# proc-macro-crate v3.2.0
+# ├── parity-scale-codec-derive v3.7.4 (proc-macro)
+# │   ├── parity-scale-codec v3.7.4
+# │   │   ├── bounded-collections v0.1.9
+# │   │   │   └── sp-core v7.0.0 (https://github.com/paritytech/substrate?branch=polkadot-v0.9.42#ff24c60a)
+# │   │   │       ├── frame-benchmarking v4.0.0-dev (https://github.com/paritytech/substrate?branch=polkadot-v0.9.42#ff24c60a)
+#
+# cf https://github.com/integritee-network/worker/blob/0a401bcaabb27ba4e5f59357b0a324c311b39ecd/Cargo.lock#L5305
+# error: package `parity-scale-codec v3.7.4` cannot be built because it requires rustc 1.79.0 or newer, while the currently active rustc version is 1.66.0-nightl
+# parity-scale-codec = { version = "=3.6.3" }
+
+# icu_normalizer = { version = "=1.4.3" }
+
 ################################################################################
 # [patch."https://github.com/Interstellar-Network/lib-garble-rs.git"]
 # lib-garble-rs = { path = "../lib-garble-rs/lib-garble-rs/" }
 
-# [patch."https://github.com/Interstellar-Network/rs-common.git"]
-# interstellar-http-client = { path = "../rs-common/http-client/" }
-# tests-utils = { path = "../rs-common/tests_utils/" }
-# interstellar-ipfs-client = { path = "../rs-common/ipfs-client-http-req/" }
+[patch."https://github.com/Interstellar-Network/rs-common.git"]
+interstellar-http-client = { path = "../rs-common/http-client/" }
+tests-utils = { path = "../rs-common/tests_utils/" }
+interstellar-ipfs-client = { path = "../rs-common/ipfs-client-http-req/" }
+
+# interstellar-http-client = { path = "../../rs-common/http-client/" }
+# tests-utils = { path = "../../rs-common/tests_utils/" }
+# interstellar-ipfs-client = { path = "../../rs-common/ipfs-client-http-req/" }
 
 # [patch."https://github.com/Interstellar-Network/lib_circuits.git"]
 # circuit-gen-rs = { path = "../lib_circuits/circuit-gen-rs" }

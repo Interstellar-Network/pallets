@@ -112,10 +112,10 @@ try-runtime = ["frame-support/try-runtime"]
 # prost-build = "0.11"
 
 [dev-dependencies]
-env_logger = "0.10"
-test-log = "0.2"
+env_logger = { workspace = true } 
+test-log = { workspace = true }
 serial_test = "2"
-tokio = { version = "*", default-features = false, features = ["rt", "macros"] }
+tokio = { workspace = true }
 futures = "0.3"
 httpmock = "0.6"
 

@@ -73,10 +73,10 @@ try-runtime = ["frame-support/try-runtime"]
 # walkdir = "2.3.2"
 
 [dev-dependencies]
-env_logger = "0.10.0"
-test-log = "0.2"
+env_logger = { workspace = true } 
+test-log = { workspace = true }
 serial_test = "2"
-tokio = { version = "*", default-features = false, features = ["rt", "macros"] }
+tokio = { workspace = true }
 futures = "0.3"
 
 interstellar-http-client = { default-features = false, git = "https://github.com/Interstellar-Network/rs-common.git", branch = "main", features = [
